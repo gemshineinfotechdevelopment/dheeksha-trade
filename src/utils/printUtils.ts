@@ -68,10 +68,10 @@ export const generateBillHtml = (bill: BillPrintData): string => {
   if (discNum > 0) {
     if (rawDiscStr.includes('%') || discNum <= 100) {
       discountAmt = (subtotal * discNum) / 100;
-      discountLabel = `Discount Amount (${bill.discount || discNum}${rawDiscStr.includes('%') ? '' : '%'})`;
+      discountLabel = `Discount (${bill.discount || discNum}${rawDiscStr.includes('%') ? '' : '%'})`;
     } else {
       discountAmt = discNum;
-      discountLabel = `Discount Amount (₹${discNum})`;
+      discountLabel = `Discount (₹${discNum.toLocaleString('en-IN')})`;
     }
   }
 
@@ -80,15 +80,15 @@ export const generateBillHtml = (bill: BillPrintData): string => {
   const cleanPack = rawPackStr.replace(/[^0-9.]/g, '');
   const packNum = parseFloat(cleanPack) || 0;
   let packingAmt = 0;
-  let packingLabel = 'Packing Amount';
+  let packingLabel = 'Packing Charges';
   if (packNum > 0) {
     const baseAfterDiscount = Math.max(0, subtotal - discountAmt);
     if (rawPackStr.includes('%') || packNum <= 100) {
       packingAmt = (baseAfterDiscount * packNum) / 100;
-      packingLabel = `Packing Amount (${bill.packing || packNum}${rawPackStr.includes('%') ? '' : '%'})`;
+      packingLabel = `Packing (${bill.packing || packNum}${rawPackStr.includes('%') ? '' : '%'})`;
     } else {
       packingAmt = packNum;
-      packingLabel = `Packing Amount (₹${packNum})`;
+      packingLabel = `Packing (₹${packNum.toLocaleString('en-IN')})`;
     }
   }
 
@@ -100,7 +100,7 @@ export const generateBillHtml = (bill: BillPrintData): string => {
   let taxLabel = 'Tax Amount';
   if (taxNum > 0) {
     taxAmt = taxNum;
-    taxLabel = `Tax Amount (₹${taxNum.toLocaleString('en-IN')})`;
+    taxLabel = `Tax (₹${taxNum.toLocaleString('en-IN')})`;
   }
 
   // Grand Total calculation
@@ -119,14 +119,15 @@ export const generateBillHtml = (bill: BillPrintData): string => {
 
   const productRowsHtml = (bill.products || []).map((item, idx) => {
     const numAmt = parseFloat(String(item.amount).replace(/,/g, '')) || 0;
+    const isEven = idx % 2 === 1;
     return `
-      <tr>
-        <td style="border: 1px solid #000; padding: 6px 8px; text-align: left;">${idx + 1}</td>
-        <td style="border: 1px solid #000; padding: 6px 8px; text-align: left; font-weight: 600;">${item.particular || '-'}</td>
-        <td style="border: 1px solid #000; padding: 6px 8px; text-align: left;">${item.quantity || '-'}</td>
-        <td style="border: 1px solid #000; padding: 6px 8px; text-align: left;">${item.rate || '-'}</td>
-        <td style="border: 1px solid #000; padding: 6px 8px; text-align: left;">${item.pktUnit && item.pktUnit !== '-' ? item.pktUnit : ''}</td>
-        <td style="border: 1px solid #000; padding: 6px 8px; text-align: right; font-weight: 600;">${numAmt.toFixed(2)}</td>
+      <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
+        <td style="border: 1px solid #CBD5E1; padding: 7px 8px; text-align: center; color: #475569; font-weight: 600;">${idx + 1}</td>
+        <td style="border: 1px solid #CBD5E1; padding: 7px 10px; text-align: left; font-weight: 700; color: #0F172A;">${item.particular || '-'}</td>
+        <td style="border: 1px solid #CBD5E1; padding: 7px 8px; text-align: center; font-weight: 700; color: #0F172A;">${item.quantity || '-'}</td>
+        <td style="border: 1px solid #CBD5E1; padding: 7px 8px; text-align: right; color: #334155;">₹ ${(parseFloat(String(item.rate)) || 0).toFixed(2)}</td>
+        <td style="border: 1px solid #CBD5E1; padding: 7px 8px; text-align: center; color: #64748B;">${item.pktUnit && item.pktUnit !== '-' ? item.pktUnit : '-'}</td>
+        <td style="border: 1px solid #CBD5E1; padding: 7px 10px; text-align: right; font-weight: 800; color: #0F172A;">₹ ${numAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
       </tr>
     `;
   }).join('');
@@ -140,7 +141,7 @@ export const generateBillHtml = (bill: BillPrintData): string => {
   <style>
     @page {
       size: A4 portrait;
-      margin: 10mm 12mm;
+      margin: 8mm 10mm;
     }
     *, *:before, *:after {
       box-sizing: border-box;
@@ -148,100 +149,137 @@ export const generateBillHtml = (bill: BillPrintData): string => {
       padding: 0;
     }
     html, body {
-      background: #ffffff;
-      color: #000000;
+      background: #FFFFFF;
+      color: #0F172A;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
     .bill-wrapper {
       width: 100%;
-      padding: 10px 14px;
+      max-width: 794px;
+      margin: 0 auto;
+      padding: 6px;
     }
     .top-header {
       position: relative;
       text-align: center;
-      margin-bottom: 18px;
+      border-bottom: 2px solid #0F172A;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
     }
     .signatory {
       position: absolute;
       right: 0;
       top: 0;
-      font-size: 13px;
-      font-weight: 600;
-      color: #000000;
+      font-size: 12px;
+      font-weight: 700;
+      color: #475569;
     }
     .comp-name {
-      font-size: 28px;
-      font-weight: 800;
-      color: #000000;
+      font-size: 26px;
+      font-weight: 900;
+      color: #0B4DB7;
       margin-bottom: 2px;
       letter-spacing: -0.01em;
+      text-transform: uppercase;
     }
-    .comp-city {
-      font-size: 14px;
-      font-weight: 600;
-      color: #334155;
+    .comp-sub {
+      font-size: 11px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
-    .meta-block {
-      font-size: 13.5px;
-      line-height: 1.65;
-      color: #000000;
-      margin-bottom: 16px;
+    .doc-type-badge {
+      display: inline-block;
+      background: #0F172A;
+      color: #FFFFFF;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 12px;
+      border-radius: 4px;
+      margin-top: 6px;
+    }
+    .meta-box {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 12px;
+      border: 1px solid #CBD5E1;
+      border-radius: 6px;
+      padding: 10px 14px;
+      background-color: #F8FAFC;
+      margin-bottom: 14px;
+      font-size: 12.5px;
     }
     .meta-row {
-      margin-bottom: 2px;
+      display: flex;
+      margin-bottom: 4px;
+      line-height: 1.4;
     }
     .meta-label {
-      font-weight: 400;
+      width: 120px;
+      color: #64748B;
+      font-weight: 600;
+      font-size: 12px;
     }
     .meta-val {
       font-weight: 700;
+      color: #0F172A;
+      flex: 1;
     }
     .prod-table {
       width: 100%;
       border-collapse: collapse;
-      border: 1px solid #000000;
-      font-size: 12.5px;
-      margin-bottom: 20px;
+      border: 1px solid #0F172A;
+      font-size: 12px;
+      margin-bottom: 16px;
     }
     .prod-table th {
-      border: 1px solid #000000;
-      padding: 6px 8px;
-      text-align: left;
-      font-weight: 700;
-      background-color: #ffffff;
+      background-color: #0F172A;
+      color: #FFFFFF;
+      border: 1px solid #0F172A;
+      padding: 8px 8px;
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
     }
     .prod-table td {
-      border: 1px solid #000000;
-      padding: 6px 8px;
+      border: 1px solid #CBD5E1;
+      padding: 7px 8px;
+      vertical-align: middle;
     }
     .split-bottom {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      gap: 20px;
+      gap: 16px;
       page-break-inside: avoid;
     }
     .receipt-box {
       flex: 1 1 50%;
       max-width: 48%;
-      border: 1px solid #000000;
-      min-height: 170px;
-      max-height: 230px;
+      border: 1px solid #CBD5E1;
+      border-radius: 6px;
+      min-height: 160px;
+      max-height: 220px;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #ffffff;
-      padding: 4px;
+      background: #F8FAFC;
+      padding: 6px;
       box-sizing: border-box;
       overflow: hidden;
     }
     .receipt-img {
       max-width: 100%;
-      max-height: 220px;
+      max-height: 205px;
       object-fit: contain;
       display: block;
+      border-radius: 4px;
     }
     .summary-box {
       flex: 1 1 50%;
@@ -250,24 +288,51 @@ export const generateBillHtml = (bill: BillPrintData): string => {
     .summary-table {
       width: 100%;
       border-collapse: collapse;
-      border: 1px solid #000000;
-      font-size: 12.5px;
+      border: 1px solid #0F172A;
+      font-size: 12px;
     }
     .summary-table td {
-      border: 1px solid #000000;
+      border: 1px solid #CBD5E1;
       padding: 6px 10px;
     }
     .summary-label-cell {
-      font-weight: 500;
+      font-weight: 600;
+      color: #334155;
+      background-color: #F8FAFC;
     }
     .summary-val-cell {
       text-align: right;
-      font-weight: 500;
+      font-weight: 700;
+      color: #0F172A;
     }
     .summary-total-row td {
-      font-weight: 800;
-      font-size: 13.5px;
-      padding: 7px 10px;
+      background-color: #0F172A !important;
+      color: #FFFFFF !important;
+      font-weight: 900;
+      font-size: 14px;
+      padding: 8px 10px;
+      border: 1px solid #0F172A !important;
+    }
+    .summary-total-row .summary-val-cell {
+      color: #FFFFFF !important;
+    }
+    .sig-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-top: 24px;
+      padding-top: 14px;
+      border-top: 1px dashed #CBD5E1;
+      font-size: 11.5px;
+      page-break-inside: avoid;
+    }
+    .sig-block {
+      text-align: center;
+      width: 160px;
+    }
+    .sig-line {
+      border-top: 1px solid #0F172A;
+      margin-bottom: 4px;
     }
   </style>
 </head>
@@ -275,36 +340,41 @@ export const generateBillHtml = (bill: BillPrintData): string => {
   <div class="bill-wrapper">
     <!-- Header -->
     <div class="top-header">
-      <div class="signatory">${preparedBy}</div>
+      <div class="signatory">Prepared By: <b>${preparedBy}</b></div>
       <div class="comp-name">Dheeksha Trade Link</div>
-      <div class="comp-city">Sivakasi</div>
+      <div class="comp-sub">Wholesale & Retail Trading • Sivakasi</div>
+      <div><span class="doc-type-badge">ESTIMATE / PARTICULAR BILL</span></div>
     </div>
 
     <!-- Metadata Block -->
-    <div class="meta-block">
-      <div class="meta-row"><span class="meta-label">Bill No: </span><span class="meta-val">${bill.billNo || '-'}</span></div>
-      <div class="meta-row"><span class="meta-label">Customer Name: </span><span class="meta-val">${bill.customerName || '-'}</span></div>
-      <div class="meta-row"><span class="meta-label">Company Name: </span><span class="meta-val">${bill.companyName || '-'}</span></div>
-      <div class="meta-row"><span class="meta-label">Total Amount: </span><span class="meta-val">${formattedTotal}</span></div>
-      <div class="meta-row"><span class="meta-label">Transport Name: </span><span class="meta-val">${transportName}</span></div>
-      <div class="meta-row"><span class="meta-label">Total No. of Cases: </span><span class="meta-val">${computedCases}</span></div>
-      <div class="meta-row"><span class="meta-label">Date: </span><span class="meta-val">${bill.date || '-'}</span></div>
+    <div class="meta-box">
+      <div>
+        <div class="meta-row"><span class="meta-label">Bill No:</span><span class="meta-val" style="color:#0B4DB7; font-size:14px;">#${bill.billNo || '-'}</span></div>
+        <div class="meta-row"><span class="meta-label">Customer Name:</span><span class="meta-val">${bill.customerName || '-'}</span></div>
+        ${bill.companyName && bill.companyName.trim() ? `<div class="meta-row"><span class="meta-label">Company Name:</span><span class="meta-val">${bill.companyName.trim()}</span></div>` : ''}
+        <div class="meta-row"><span class="meta-label">Transport Name:</span><span class="meta-val">${transportName}</span></div>
+      </div>
+      <div>
+        <div class="meta-row"><span class="meta-label">Date:</span><span class="meta-val">${bill.date || '-'}</span></div>
+        <div class="meta-row"><span class="meta-label">Total Cases:</span><span class="meta-val" style="font-size:13.5px; color:#0B4DB7;">${computedCases}</span></div>
+        <div class="meta-row"><span class="meta-label">Phone:</span><span class="meta-val">${bill.phone || '+91 98765 43210'}</span></div>
+      </div>
     </div>
 
     <!-- Products Table -->
     <table class="prod-table">
       <thead>
         <tr>
-          <th style="width: 50px;">Si.No</th>
-          <th>Particular</th>
-          <th style="width: 80px;">Quantity</th>
-          <th style="width: 80px;">Rate</th>
-          <th style="width: 90px;">Pkt / Unit</th>
-          <th style="width: 110px; text-align: right;">Amount</th>
+          <th style="width: 40px; text-align: center;">#</th>
+          <th style="text-align: left;">Particular / Product Description</th>
+          <th style="width: 75px; text-align: center;">Cases</th>
+          <th style="width: 85px; text-align: right;">Rate (₹)</th>
+          <th style="width: 80px; text-align: center;">Pkt / Unit</th>
+          <th style="width: 110px; text-align: right;">Amount (₹)</th>
         </tr>
       </thead>
       <tbody>
-        ${productRowsHtml || '<tr><td colspan="6" style="text-align:center; padding:16px;">No product items</td></tr>'}
+        ${productRowsHtml || '<tr><td colspan="6" style="text-align:center; padding:16px; color:#64748B;">No product items attached.</td></tr>'}
       </tbody>
     </table>
 
@@ -315,9 +385,9 @@ export const generateBillHtml = (bill: BillPrintData): string => {
         ${
           receiptSrc
             ? `<img src="${receiptSrc}" class="receipt-img" alt="Transport Receipt" />`
-            : `<div style="text-align: center; color: #64748B; font-size: 11.5px; padding: 16px;">
-                 <div style="font-weight: 700; color: #0F172A; margin-bottom: 4px;">TRANSPORT / GODOWN RECEIPT</div>
-                 <div>(No receipt attached for this bill)</div>
+            : `<div style="text-align: center; color: #64748B; font-size: 11.5px; padding: 14px;">
+                 <div style="font-weight: 700; color: #0F172A; margin-bottom: 4px; font-size: 12px;">TRANSPORT / GODOWN RECEIPT</div>
+                 <div>(No physical receipt attached for this bill)</div>
                </div>`
         }
       </div>
@@ -327,14 +397,14 @@ export const generateBillHtml = (bill: BillPrintData): string => {
         <table class="summary-table">
           <tbody>
             <tr>
-              <td class="summary-label-cell">Particular Amount</td>
-              <td class="summary-val-cell">${subtotal.toFixed(2)}</td>
+              <td class="summary-label-cell">Subtotal / Particular Amount</td>
+              <td class="summary-val-cell">₹ ${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>
             ${
               discountAmt > 0
                 ? `<tr>
-                    <td class="summary-label-cell">${discountLabel}</td>
-                    <td class="summary-val-cell">${discountAmt.toFixed(2)}</td>
+                    <td class="summary-label-cell" style="color:#DC2626;">${discountLabel}</td>
+                    <td class="summary-val-cell" style="color:#DC2626;">- ₹ ${discountAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   </tr>`
                 : ''
             }
@@ -342,7 +412,7 @@ export const generateBillHtml = (bill: BillPrintData): string => {
               packingAmt > 0
                 ? `<tr>
                     <td class="summary-label-cell">${packingLabel}</td>
-                    <td class="summary-val-cell">${packingAmt.toFixed(2)}</td>
+                    <td class="summary-val-cell">+ ₹ ${packingAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   </tr>`
                 : ''
             }
@@ -350,16 +420,30 @@ export const generateBillHtml = (bill: BillPrintData): string => {
               taxAmt > 0
                 ? `<tr>
                     <td class="summary-label-cell">${taxLabel}</td>
-                    <td class="summary-val-cell">${taxAmt.toFixed(2)}</td>
+                    <td class="summary-val-cell">+ ₹ ${taxAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   </tr>`
                 : ''
             }
             <tr class="summary-total-row">
-              <td>Total Amount</td>
-              <td class="summary-val-cell">${formattedTotal}</td>
+              <td>NET TOTAL AMOUNT</td>
+              <td class="summary-val-cell">₹ ${formattedTotal}</td>
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Signatures -->
+    <div class="sig-section">
+      <div class="sig-block">
+        <div style="height: 28px;"></div>
+        <div class="sig-line"></div>
+        <div style="font-weight: 700; color:#334155;">Customer Signature</div>
+      </div>
+      <div class="sig-block">
+        <div style="font-weight: 700; color:#0F172A; margin-bottom: 24px;">For Dheeksha Trade Link</div>
+        <div class="sig-line"></div>
+        <div style="font-weight: 700; color:#334155;">Authorized Signatory</div>
       </div>
     </div>
   </div>
@@ -416,7 +500,8 @@ export const generateCustomerListPrintHtml = (
     const idDisplay = c.idCode || `#${(idx + 1).toString().padStart(4, '0')}`;
     const deb = (c.totalDebit || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
     const cred = (c.totalCredit || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-    
+    const isEven = idx % 2 === 1;
+
     let balanceHtml = '';
     if ((c.pendingDue || 0) > 0) {
       balanceHtml = `<span style="color:#DC2626; font-weight:800;">₹ ${(c.pendingDue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Due)</span>`;
@@ -427,18 +512,18 @@ export const generateCustomerListPrintHtml = (
     }
 
     return `
-      <tr class="list-row">
-        <td class="text-center" style="width: 35px;">${idx + 1}</td>
-        <td class="text-center" style="width: 60px; font-weight:700; color:#475569;">${idDisplay}</td>
-        <td style="font-weight:800; color:#0F172A;">
+      <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
+        <td class="text-center" style="width: 35px; border: 1px solid #CBD5E1; padding: 6px 5px;">${idx + 1}</td>
+        <td class="text-center" style="width: 60px; font-weight:700; color:#475569; border: 1px solid #CBD5E1; padding: 6px 5px;">${idDisplay}</td>
+        <td style="font-weight:800; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">
           ${c.name}
           ${c.gst && c.gst !== 'N/A' ? `<div style="font-size:9.5px; color:#64748B; font-weight:600;">GSTIN: ${c.gst}</div>` : ''}
         </td>
-        <td style="font-size:11px; color:#334155; width:95px;">${c.mobile || '-'}</td>
-        <td style="font-size:10.5px; color:#475569; max-width:180px;">${c.address || '-'}</td>
-        <td class="text-right" style="font-weight:700; color:#1E293B; width:105px;">₹ ${deb}</td>
-        <td class="text-right" style="font-weight:700; color:#16A34A; width:105px;">₹ ${cred}</td>
-        <td class="text-right" style="width:130px;">${balanceHtml}</td>
+        <td style="font-size:11px; color:#334155; width:95px; border: 1px solid #CBD5E1; padding: 6px 5px;">${c.mobile || '-'}</td>
+        <td style="font-size:10.5px; color:#475569; max-width:180px; border: 1px solid #CBD5E1; padding: 6px 5px;">${c.address || '-'}</td>
+        <td class="text-right" style="font-weight:700; color:#1E293B; width:105px; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${deb}</td>
+        <td class="text-right" style="font-weight:700; color:#16A34A; width:105px; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${cred}</td>
+        <td class="text-right" style="width:130px; border: 1px solid #CBD5E1; padding: 6px 8px;">${balanceHtml}</td>
       </tr>
     `;
   }).join('');
@@ -474,7 +559,7 @@ export const generateCustomerListPrintHtml = (
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      border-bottom: 2px solid #000000;
+      border-bottom: 2px solid #0F172A;
       padding-bottom: 8px;
       margin-bottom: 10px;
     }
@@ -546,7 +631,7 @@ export const generateCustomerListPrintHtml = (
       width: 100%;
       border-collapse: collapse;
       font-size: 11px;
-      border: 1px solid #000000;
+      border: 1px solid #0F172A;
     }
     thead {
       display: table-header-group;
@@ -558,12 +643,12 @@ export const generateCustomerListPrintHtml = (
       page-break-inside: avoid;
     }
     .data-table th {
-      background-color: #F1F5F9;
-      color: #0F172A;
+      background-color: #0F172A;
+      color: #FFFFFF;
       font-weight: 800;
       font-size: 10.5px;
       padding: 6px 5px;
-      border: 1px solid #94A3B8;
+      border: 1px solid #0F172A;
       text-align: left;
       letter-spacing: 0.02em;
     }
@@ -579,9 +664,9 @@ export const generateCustomerListPrintHtml = (
       text-align: right !important;
     }
     .totals-row td {
-      background-color: #F8FAFC;
-      border-top: 2px solid #000000 !important;
-      border-bottom: 2px solid #000000 !important;
+      background-color: #0F172A !important;
+      color: #FFFFFF !important;
+      border: 1px solid #0F172A !important;
       font-size: 11.5px;
       font-weight: 900;
     }
@@ -669,12 +754,12 @@ export const generateCustomerListPrintHtml = (
         <tr class="totals-row">
           <td colspan="5" class="text-right" style="padding-right: 10px;">GRAND TOTALS (${customers.length} Customers):</td>
           <td class="text-right">₹ ${totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-          <td class="text-right" style="color:#16A34A;">₹ ${totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+          <td class="text-right">₹ ${totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
           <td class="text-right">
             ${
               totalPendingDue > 0
-                ? `<span style="color:#DC2626;">Due: ₹ ${totalPendingDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>`
-                : `<span style="color:#16A34A;">Settled</span>`
+                ? `Due: ₹ ${totalPendingDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                : `Settled`
             }
           </td>
         </tr>
@@ -724,21 +809,22 @@ export const generateLedgerStatementHtml = (
     const cred = parseFloat(String(entry.credit || '0').replace(/,/g, '')) || 0;
     totalDeb += deb;
     totalCred += cred;
+    const isEven = idx % 2 === 1;
 
     return `
-      <tr>
-        <td class="text-center">${idx + 1}</td>
-        <td class="text-center">${entry.date || '-'}</td>
-        <td style="font-weight:700;">${entry.billNo ? `Bill #${entry.billNo}` : entry.type || 'PAYMENT'}</td>
-        <td>${entry.companyName || '-'}</td>
-        <td class="text-right" style="color:#1E293B; font-weight:700;">${deb > 0 ? `₹ ${deb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
-        <td class="text-right" style="color:#16A34A; font-weight:700;">${cred > 0 ? `₹ ${cred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
-        <td class="text-right" style="font-weight:800;">₹ ${entry.balance || '0.00'}</td>
+      <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
+        <td class="text-center" style="border: 1px solid #CBD5E1; padding: 6px 4px; color:#64748B;">${idx + 1}</td>
+        <td class="text-center" style="border: 1px solid #CBD5E1; padding: 6px 6px; font-weight:600; color:#334155;">${entry.date || '-'}</td>
+        <td style="border: 1px solid #CBD5E1; padding: 6px 8px; font-weight:700; color:#0F172A;">${entry.billNo ? `Bill #${entry.billNo}` : entry.type || 'PAYMENT / RECEIPT'}</td>
+        <td style="border: 1px solid #CBD5E1; padding: 6px 8px; color:#475569;">${entry.companyName || '-'}</td>
+        <td class="text-right" style="border: 1px solid #CBD5E1; padding: 6px 8px; color:#1E293B; font-weight:700;">${deb > 0 ? `₹ ${deb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
+        <td class="text-right" style="border: 1px solid #CBD5E1; padding: 6px 8px; color:#16A34A; font-weight:700;">${cred > 0 ? `₹ ${cred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
+        <td class="text-right" style="border: 1px solid #CBD5E1; padding: 6px 8px; font-weight:800; color:#0B4DB7;">₹ ${entry.balance || '0.00'}</td>
       </tr>
     `;
   }).join('');
 
-  const netBalance = totalCred - totalDeb;
+  const netBalance = totalDeb - totalCred;
 
   return `
 <!DOCTYPE html>
@@ -748,17 +834,23 @@ export const generateLedgerStatementHtml = (
   <title>Account Statement - ${customerName}</title>
   <style>
     @page { size: A4 portrait; margin: 8mm 10mm; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #000; margin:0; padding:10px; }
-    .header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
-    .title { font-size: 24px; font-weight: 900; color: #0B4DB7; }
-    .sub { font-size: 11px; color: #64748B; font-weight: 700; text-transform: uppercase; }
+    *, *:before, *:after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #0F172A; margin:0; padding:8px; background:#fff; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0F172A; padding-bottom: 8px; margin-bottom: 10px; }
+    .title { font-size: 24px; font-weight: 900; color: #0B4DB7; letter-spacing: -0.01em; }
+    .sub { font-size: 10.5px; color: #64748B; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
     .date-badge { display: inline-block; background: #EFF6FF; color: #0B4DB7; border: 1px solid #BFDBFE; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-top: 4px; }
-    .table { width: 100%; border-collapse: collapse; font-size: 11.5px; border: 1px solid #000; margin-top: 8px; }
-    .table th { background: #F1F5F9; border: 1px solid #94A3B8; padding: 6px; font-weight: 800; font-size: 11px; }
-    .table td { border: 1px solid #CBD5E1; padding: 5px 6px; }
+    .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+    .kpi-box { border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px 12px; background: #F8FAFC; }
+    .kpi-lbl { font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase; }
+    .kpi-num { font-size: 15px; font-weight: 900; margin-top: 2px; }
+    .table { width: 100%; border-collapse: collapse; font-size: 11.5px; border: 1px solid #0F172A; }
+    .table th { background: #0F172A; color: #FFFFFF; border: 1px solid #0F172A; padding: 7px 6px; font-weight: 800; font-size: 10.5px; letter-spacing: 0.03em; text-transform: uppercase; }
+    .table td { border: 1px solid #CBD5E1; padding: 6px 6px; }
     .text-center { text-align: center; }
     .text-right { text-align: right; }
-    .totals td { background: #F8FAFC; border-top: 2px solid #000; font-weight: 800; font-size: 12px; }
+    .totals td { background: #0F172A !important; color: #FFFFFF !important; border: 1px solid #0F172A !important; font-weight: 900; font-size: 12px; padding: 8px 6px; }
+    .sig-section { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 26px; padding-top: 14px; border-top: 1px dashed #CBD5E1; font-size: 11px; page-break-inside: avoid; }
   </style>
 </head>
 <body>
@@ -766,12 +858,31 @@ export const generateLedgerStatementHtml = (
     <div>
       <div class="title">DHEEKSHA TRADE LINK</div>
       <div class="sub">Wholesale & Retail Trading • Sivakasi</div>
-      <h2 style="font-size:15px; margin-top:4px;">ACCOUNT STATEMENT: ${customerName}</h2>
+      <h2 style="font-size:15px; font-weight:800; margin-top:4px; color:#0F172A;">ACCOUNT STATEMENT: ${customerName}</h2>
       ${dateRangeText ? `<div class="date-badge">${dateRangeText}</div>` : ''}
     </div>
-    <div style="text-align:right; font-size:11.5px;">
-      <div>Generated: <b>${currentDate}</b></div>
-      <div>Total Entries: <b>${ledgerEntries.length}</b></div>
+    <div style="text-align:right; font-size:11.5px; color:#334155;">
+      <div>Generated Date: <b>${currentDate}</b></div>
+      <div>Total Transactions: <b>${ledgerEntries.length}</b></div>
+      <div>Phone: <b>+91 98765 43210</b></div>
+    </div>
+  </div>
+
+  <!-- KPI Summary Cards -->
+  <div class="kpi-row">
+    <div class="kpi-box">
+      <div class="kpi-lbl">Total Purchases / Debit (Dr)</div>
+      <div class="kpi-num" style="color:#0F172A;">₹ ${totalDeb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-lbl">Total Received / Credit (Cr)</div>
+      <div class="kpi-num" style="color:#16A34A;">₹ ${totalCred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+    </div>
+    <div class="kpi-box" style="background-color:${netBalance > 0 ? '#FEF2F2' : '#F0FDF4'}; border-color:${netBalance > 0 ? '#FECACA' : '#BBF7D0'};">
+      <div class="kpi-lbl" style="color:${netBalance > 0 ? '#991B1B' : '#166534'};">Net Balance Status</div>
+      <div class="kpi-num" style="color:${netBalance > 0 ? '#DC2626' : '#16A34A'};">
+        ₹ ${Math.abs(netBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${netBalance > 0 ? '(Due Pending)' : netBalance < 0 ? '(Advance Held)' : '(Settled)'}
+      </div>
     </div>
   </div>
 
@@ -781,26 +892,38 @@ export const generateLedgerStatementHtml = (
         <th class="text-center" style="width:35px;">#</th>
         <th class="text-center" style="width:85px;">Date</th>
         <th>Particulars / Bill No</th>
-        <th>Company</th>
+        <th>Company Name</th>
         <th class="text-right" style="width:110px;">Debit (Dr)</th>
         <th class="text-right" style="width:110px;">Credit (Cr)</th>
         <th class="text-right" style="width:120px;">Balance (₹)</th>
       </tr>
     </thead>
     <tbody>
-      ${rowsHtml || '<tr><td colspan="7" class="text-center" style="padding:18px;">No transaction entries found for the selected period.</td></tr>'}
+      ${rowsHtml || '<tr><td colspan="7" class="text-center" style="padding:18px; color:#64748B;">No transaction entries found for the selected period.</td></tr>'}
     </tbody>
     <tfoot>
       <tr class="totals">
-        <td colspan="4" class="text-right">TOTALS:</td>
+        <td colspan="4" class="text-right" style="padding-right:10px;">GRAND TOTALS:</td>
         <td class="text-right">₹ ${totalDeb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right" style="color:#16A34A;">₹ ${totalCred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right" style="color:${netBalance < 0 ? '#DC2626' : '#16A34A'};">
-          ₹ ${Math.abs(netBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${netBalance < 0 ? 'Dr' : 'Cr'}
+        <td class="text-right">₹ ${totalCred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right">
+          ₹ ${Math.abs(netBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${netBalance > 0 ? 'Dr' : 'Cr'}
         </td>
       </tr>
     </tfoot>
   </table>
+
+  <!-- Signatures -->
+  <div class="sig-section">
+    <div style="text-align:center; width:160px;">
+      <div style="height:28px;"></div>
+      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Customer Verification</div>
+    </div>
+    <div style="text-align:center; width:160px;">
+      <div style="font-weight:700; margin-bottom:24px;">For Dheeksha Trade Link</div>
+      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Authorized Signatory</div>
+    </div>
+  </div>
 </body>
 </html>
   `;
@@ -817,22 +940,26 @@ export const printLedgerStatementDirectly = (customerName: string, ledgerEntries
 export const generateParticularsListPrintHtml = (particulars: any[], dateRangeText?: string): string => {
   const currentDate = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
   let totalSum = 0;
+  let totalCasesSum = 0;
 
   const rowsHtml = particulars.map((p, idx) => {
     const amt = parseFloat(String(p.total || p.amount || '0').replace(/,/g, '')) || 0;
+    const cases = parseFloat(String(p.caseCount || '0')) || 0;
     totalSum += amt;
+    totalCasesSum += cases;
     const countItems = (p.products || []).length;
+    const isEven = idx % 2 === 1;
 
     return `
-      <tr>
-        <td class="text-center" style="width:35px;">${idx + 1}</td>
-        <td class="text-center" style="font-weight:800; color:#0B4DB7; width:75px;">#${p.billNo || '-'}</td>
-        <td class="text-center" style="width:85px;">${p.date || '-'}</td>
-        <td style="font-weight:700;">${p.customerName || '-'}</td>
-        <td>${p.companyName || '-'}</td>
-        <td class="text-center" style="width:60px;">${p.caseCount || '-'}</td>
-        <td class="text-center" style="width:75px;">${countItems} items</td>
-        <td class="text-right" style="font-weight:800; width:120px;">₹ ${amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+      <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
+        <td class="text-center" style="width:35px; border: 1px solid #CBD5E1; padding: 6px 4px; color:#64748B;">${idx + 1}</td>
+        <td class="text-center" style="font-weight:800; color:#0B4DB7; width:75px; border: 1px solid #CBD5E1; padding: 6px 6px;">#${p.billNo || '-'}</td>
+        <td class="text-center" style="width:85px; border: 1px solid #CBD5E1; padding: 6px 6px; color:#334155;">${p.date || '-'}</td>
+        <td style="font-weight:700; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">${p.customerName || '-'}</td>
+        <td style="border: 1px solid #CBD5E1; padding: 6px 8px; color:#475569;">${p.companyName || '-'}</td>
+        <td class="text-center" style="width:60px; font-weight:700; border: 1px solid #CBD5E1; padding: 6px 6px;">${p.caseCount || '-'}</td>
+        <td class="text-center" style="width:75px; color:#64748B; border: 1px solid #CBD5E1; padding: 6px 6px;">${countItems} items</td>
+        <td class="text-right" style="font-weight:800; width:120px; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
       </tr>
     `;
   }).join('');
@@ -845,29 +972,51 @@ export const generateParticularsListPrintHtml = (particulars: any[], dateRangeTe
   <title>Particulars Bills Master Report - ${currentDate}</title>
   <style>
     @page { size: A4 landscape; margin: 8mm 10mm; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #000; margin:0; padding:10px; }
-    .header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
-    .title { font-size: 24px; font-weight: 900; color: #0B4DB7; }
+    *, *:before, *:after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #0F172A; margin:0; padding:8px; background:#fff; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0F172A; padding-bottom: 8px; margin-bottom: 10px; }
+    .title { font-size: 24px; font-weight: 900; color: #0B4DB7; letter-spacing: -0.01em; }
     .date-badge { display: inline-block; background: #EFF6FF; color: #0B4DB7; border: 1px solid #BFDBFE; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-top: 4px; }
-    .table { width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #000; margin-top: 8px; }
-    .table th { background: #F1F5F9; border: 1px solid #94A3B8; padding: 6px; font-weight: 800; }
+    .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+    .kpi-box { border: 1px solid #CBD5E1; border-radius: 6px; padding: 7px 12px; background: #F8FAFC; }
+    .kpi-lbl { font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase; }
+    .kpi-num { font-size: 15px; font-weight: 900; margin-top: 2px; color: #0F172A; }
+    .table { width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #0F172A; }
+    .table th { background: #0F172A; color: #FFFFFF; border: 1px solid #0F172A; padding: 6px; font-weight: 800; font-size: 10.5px; text-transform: uppercase; }
     .table td { border: 1px solid #CBD5E1; padding: 5px 6px; }
     .text-center { text-align: center; }
     .text-right { text-align: right; }
-    .totals td { background: #F8FAFC; border-top: 2px solid #000; font-weight: 900; font-size: 11.5px; }
+    .totals td { background: #0F172A !important; color: #FFFFFF !important; border: 1px solid #0F172A !important; font-weight: 900; font-size: 11.5px; padding: 7px 6px; }
+    .sig-section { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 24px; padding-top: 12px; border-top: 1px dashed #CBD5E1; font-size: 11px; page-break-inside: avoid; }
   </style>
 </head>
 <body>
   <div class="header">
     <div>
       <div class="title">DHEEKSHA TRADE LINK</div>
-      <div style="font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Wholesale & Retail Trading • Sivakasi</div>
-      <h2 style="font-size:15px; margin-top:4px;">PARTICULARS BILLS MASTER REPORT</h2>
+      <div style="font-size:10.5px; font-weight:700; color:#475569; text-transform:uppercase;">Wholesale & Retail Trading • Sivakasi</div>
+      <h2 style="font-size:15px; font-weight:800; margin-top:4px; color:#0F172A;">PARTICULARS BILLS MASTER REPORT</h2>
       ${dateRangeText ? `<div class="date-badge">${dateRangeText}</div>` : ''}
     </div>
-    <div style="text-align:right; font-size:11.5px;">
-      <div>Generated: <b>${currentDate}</b></div>
-      <div>Total Bills: <b>${particulars.length}</b></div>
+    <div style="text-align:right; font-size:11.5px; color:#334155;">
+      <div>Generated Date: <b>${currentDate}</b></div>
+      <div>Total Records: <b>${particulars.length} Bills</b></div>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-row">
+    <div class="kpi-box">
+      <div class="kpi-lbl">Total Bills Count</div>
+      <div class="kpi-num">${particulars.length}</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-lbl">Total Cases Billed</div>
+      <div class="kpi-num" style="color:#0B4DB7;">${totalCasesSum}</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-lbl">Total Billed Amount</div>
+      <div class="kpi-num" style="color:#16A34A;">₹ ${totalSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
     </div>
   </div>
 
@@ -885,15 +1034,33 @@ export const generateParticularsListPrintHtml = (particulars: any[], dateRangeTe
       </tr>
     </thead>
     <tbody>
-      ${rowsHtml || '<tr><td colspan="8" class="text-center" style="padding:18px;">No bill records found for the selected period.</td></tr>'}
+      ${rowsHtml || '<tr><td colspan="8" class="text-center" style="padding:18px; color:#64748B;">No bill records found for the selected period.</td></tr>'}
     </tbody>
     <tfoot>
       <tr class="totals">
-        <td colspan="7" class="text-right">GRAND TOTAL (${particulars.length} Bills):</td>
+        <td colspan="5" class="text-right" style="padding-right:10px;">GRAND TOTAL (${particulars.length} Bills):</td>
+        <td class="text-center">${totalCasesSum}</td>
+        <td></td>
         <td class="text-right">₹ ${totalSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
       </tr>
     </tfoot>
   </table>
+
+  <!-- Signatures -->
+  <div class="sig-section">
+    <div style="text-align:center; width:150px;">
+      <div style="height:24px;"></div>
+      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Prepared By</div>
+    </div>
+    <div style="text-align:center; width:150px;">
+      <div style="height:24px;"></div>
+      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Checked & Verified</div>
+    </div>
+    <div style="text-align:center; width:150px;">
+      <div style="font-weight:700; margin-bottom:20px;">For Dheeksha Trade Link</div>
+      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Authorized Signatory</div>
+    </div>
+  </div>
 </body>
 </html>
   `;
@@ -909,14 +1076,17 @@ export const printParticularsListDirectly = (particulars: any[], dateRangeText?:
  */
 export const generateCompaniesListPrintHtml = (companies: any[]): string => {
   const currentDate = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
-  const rowsHtml = companies.map((c, idx) => `
-    <tr>
-      <td class="text-center" style="width:40px;">${idx + 1}</td>
-      <td style="font-weight:700; color:#0F172A;">${c.name}</td>
-      <td style="color:#334155;">${c.gstin || '-'}</td>
-      <td style="color:#475569;">${c.address || '-'}</td>
+  const rowsHtml = companies.map((c, idx) => {
+    const isEven = idx % 2 === 1;
+    return `
+    <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
+      <td class="text-center" style="width:40px; border: 1px solid #CBD5E1; padding: 6px;">${idx + 1}</td>
+      <td style="font-weight:700; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">${c.name}</td>
+      <td style="color:#334155; border: 1px solid #CBD5E1; padding: 6px 8px;">${c.gstin || '-'}</td>
+      <td style="color:#475569; border: 1px solid #CBD5E1; padding: 6px 8px;">${c.address || '-'}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   return `
 <!DOCTYPE html>
@@ -926,10 +1096,11 @@ export const generateCompaniesListPrintHtml = (companies: any[]): string => {
   <title>Companies List - ${currentDate}</title>
   <style>
     @page { size: A4 portrait; margin: 8mm 10mm; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin:0; padding:10px; }
-    .header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
-    .table { width: 100%; border-collapse: collapse; font-size: 11.5px; border: 1px solid #000; }
-    .table th { background: #F1F5F9; border: 1px solid #94A3B8; padding: 7px; font-weight: 800; }
+    *, *:before, *:after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin:0; padding:8px; color:#0F172A; }
+    .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0F172A; padding-bottom: 8px; margin-bottom: 12px; }
+    .table { width: 100%; border-collapse: collapse; font-size: 11.5px; border: 1px solid #0F172A; }
+    .table th { background: #0F172A; color:#FFFFFF; border: 1px solid #0F172A; padding: 7px; font-weight: 800; font-size: 11px; text-transform: uppercase; }
     .table td { border: 1px solid #CBD5E1; padding: 6px; }
     .text-center { text-align: center; }
   </style>
@@ -938,7 +1109,7 @@ export const generateCompaniesListPrintHtml = (companies: any[]): string => {
   <div class="header">
     <div>
       <div style="font-size:24px; font-weight:900; color:#0B4DB7;">DHEEKSHA TRADE LINK</div>
-      <h2 style="font-size:15px;">COMPANIES DIRECTORY</h2>
+      <h2 style="font-size:15px; margin-top:2px;">COMPANIES DIRECTORY</h2>
     </div>
     <div style="text-align:right; font-size:11.5px;">
       <div>Date: <b>${currentDate}</b></div>
@@ -955,7 +1126,7 @@ export const generateCompaniesListPrintHtml = (companies: any[]): string => {
       </tr>
     </thead>
     <tbody>
-      ${rowsHtml || '<tr><td colspan="4" class="text-center">No companies found.</td></tr>'}
+      ${rowsHtml || '<tr><td colspan="4" class="text-center" style="padding:16px;">No companies found.</td></tr>'}
     </tbody>
   </table>
 </body>
@@ -973,14 +1144,17 @@ export const printCompaniesListDirectly = (companies: any[]) => {
  */
 export const generateProductsListPrintHtml = (products: any[]): string => {
   const currentDate = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
-  const rowsHtml = products.map((p, idx) => `
-    <tr>
-      <td class="text-center" style="width:40px;">${idx + 1}</td>
-      <td style="font-weight:700; color:#0F172A;">${p.name}</td>
-      <td class="text-center" style="color:#64748B;">${p.hsnCode || '-'}</td>
-      <td style="text-align:right; font-weight:700; color:#0B4DB7;">₹ ${(parseFloat(p.rate) || 0).toFixed(2)}</td>
+  const rowsHtml = products.map((p, idx) => {
+    const isEven = idx % 2 === 1;
+    return `
+    <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
+      <td class="text-center" style="width:40px; border: 1px solid #CBD5E1; padding: 6px;">${idx + 1}</td>
+      <td style="font-weight:700; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">${p.name}</td>
+      <td class="text-center" style="color:#64748B; border: 1px solid #CBD5E1; padding: 6px;">${p.hsnCode || '-'}</td>
+      <td style="text-align:right; font-weight:700; color:#0B4DB7; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${(parseFloat(p.rate) || 0).toFixed(2)}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   return `
 <!DOCTYPE html>
@@ -990,10 +1164,11 @@ export const generateProductsListPrintHtml = (products: any[]): string => {
   <title>Products Catalog - ${currentDate}</title>
   <style>
     @page { size: A4 portrait; margin: 8mm 10mm; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin:0; padding:10px; }
-    .header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
-    .table { width: 100%; border-collapse: collapse; font-size: 11.5px; border: 1px solid #000; }
-    .table th { background: #F1F5F9; border: 1px solid #94A3B8; padding: 7px; font-weight: 800; }
+    *, *:before, *:after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin:0; padding:8px; color:#0F172A; }
+    .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0F172A; padding-bottom: 8px; margin-bottom: 12px; }
+    .table { width: 100%; border-collapse: collapse; font-size: 11.5px; border: 1px solid #0F172A; }
+    .table th { background: #0F172A; color:#FFFFFF; border: 1px solid #0F172A; padding: 7px; font-weight: 800; font-size: 11px; text-transform: uppercase; }
     .table td { border: 1px solid #CBD5E1; padding: 6px; }
     .text-center { text-align: center; }
   </style>
@@ -1002,7 +1177,7 @@ export const generateProductsListPrintHtml = (products: any[]): string => {
   <div class="header">
     <div>
       <div style="font-size:24px; font-weight:900; color:#0B4DB7;">DHEEKSHA TRADE LINK</div>
-      <h2 style="font-size:15px;">PRODUCTS PRICE CATALOG</h2>
+      <h2 style="font-size:15px; margin-top:2px;">PRODUCTS PRICE CATALOG</h2>
     </div>
     <div style="text-align:right; font-size:11.5px;">
       <div>Date: <b>${currentDate}</b></div>
@@ -1019,7 +1194,7 @@ export const generateProductsListPrintHtml = (products: any[]): string => {
       </tr>
     </thead>
     <tbody>
-      ${rowsHtml || '<tr><td colspan="4" class="text-center">No products found.</td></tr>'}
+      ${rowsHtml || '<tr><td colspan="4" class="text-center" style="padding:16px;">No products found.</td></tr>'}
     </tbody>
   </table>
 </body>
@@ -1032,59 +1207,95 @@ export const printProductsListDirectly = (products: any[]) => {
   triggerBrowserPrint(htmlContent);
 };
 
+/**
+ * Print Performa Quotation / Invoice (A4 Standard)
+ */
 export const generatePerformaHtml = (performa: any): string => {
-  const customer = performa.customerSnapshot || { name: 'Customer' };
+  const customer = performa.customerSnapshot || { name: performa.customerName || 'Customer' };
   const formatCurrency = (val: number | undefined) => {
     const num = val || 0;
     return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const productRowsHtml = (performa.products || []).map((item: any, idx: number) => `
-    <tr style="border-bottom: 1px solid #E2E8F0;">
-      <td style="padding: 8px 6px; text-align: center; color: #64748B;">${idx + 1}</td>
-      <td style="padding: 8px 10px;">
-        <div style="font-weight: 700; color: #0F172A;">${item.productSnapshot?.productName || item.productName || item.particular || 'Product'}</div>
-        ${(item.productSnapshot?.productCode || item.productCode) ? `<div style="font-size: 11px; color: #64748B;">Code: ${item.productSnapshot?.productCode || item.productCode}</div>` : ''}
-        ${(item.productSnapshot?.companyName || item.companyName) ? `<div style="font-size: 11px; color: #0B4DB7;">${item.productSnapshot?.companyName || item.companyName}</div>` : ''}
+  const productRowsHtml = (performa.products || []).map((item: any, idx: number) => {
+    const isEven = idx % 2 === 1;
+    const prodName = item.productSnapshot?.productName || item.productName || item.particular || 'Product';
+    const prodCode = item.productSnapshot?.productCode || item.productCode || '';
+    const compName = item.productSnapshot?.companyName || item.companyName || performa.companyName || '';
+    const rateVal = parseFloat(String(item.rate || 0)) || 0;
+    const allocatedVal = parseFloat(String(item.allocatedAmount || ((parseFloat(item.requiredCases) || 0) * rateVal * (parseFloat(item.pktPerUnit) || 1)))) || 0;
+
+    return `
+    <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
+      <td style="padding: 7px 6px; text-align: center; color: #475569; border: 1px solid #CBD5E1; font-weight: 600;">${idx + 1}</td>
+      <td style="padding: 7px 10px; border: 1px solid #CBD5E1;">
+        <div style="font-weight: 700; color: #0F172A;">${prodName}</div>
+        ${prodCode ? `<div style="font-size: 10.5px; color: #64748B;">Code: ${prodCode}</div>` : ''}
       </td>
-      <td style="padding: 8px 8px; text-align: center; font-weight: 700;">${item.requiredCases}</td>
-      <td style="padding: 8px 8px; text-align: center; font-weight: 700; color: #0B4DB7;">${item.remainingCases !== undefined ? item.remainingCases : item.requiredCases}</td>
-      <td style="padding: 8px 8px; text-align: right;">₹${formatCurrency(item.rate)}</td>
-      <td style="padding: 8px 8px; text-align: center;">${item.pktPerUnit || 1}</td>
-      <td style="padding: 8px 10px; text-align: right; font-weight: 700;">₹${formatCurrency(item.allocatedAmount)}</td>
+      <td style="padding: 7px 8px; border: 1px solid #CBD5E1; color: #0B4DB7; font-weight: 600; font-size: 11.5px;">
+        ${compName || '-'}
+      </td>
+      <td style="padding: 7px 6px; text-align: center; font-weight: 800; color: #0F172A; border: 1px solid #CBD5E1;">
+        ${item.requiredCases}
+      </td>
+      <td style="padding: 7px 6px; text-align: center; font-weight: 700; color: #0B4DB7; border: 1px solid #CBD5E1;">
+        ${item.remainingCases !== undefined ? item.remainingCases : item.requiredCases}
+      </td>
+      <td style="padding: 7px 8px; text-align: right; border: 1px solid #CBD5E1; color: #334155;">
+        ₹ ${formatCurrency(rateVal)}
+      </td>
+      <td style="padding: 7px 6px; text-align: center; border: 1px solid #CBD5E1; color: #64748B;">
+        ${item.pktPerUnit || 1}
+      </td>
+      <td style="padding: 7px 10px; text-align: right; font-weight: 800; color: #0F172A; border: 1px solid #CBD5E1;">
+        ₹ ${formatCurrency(allocatedVal)}
+      </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   return `
     <!DOCTYPE html>
     <html>
       <head>
-        <title>Performa - ${performa.performaNumber}</title>
+        <meta charset="utf-8" />
+        <title>Performa - ${performa.performaNumber || 'Quotation'}</title>
         <style>
-          @page { size: A4 portrait; margin: 10mm; }
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 10px; color: #000; background: #fff; }
-          .banner { background-color: #0F172A; color: #FFFFFF; text-align: center; padding: 6px 12px; border-radius: 4px; font-weight: 800; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 18px; font-size: 13px; }
+          @page { size: A4 portrait; margin: 8mm 10mm; }
+          *, *:before, *:after { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 8px; color: #0F172A; background: #FFFFFF; }
+          .banner { background-color: #0F172A; color: #FFFFFF; text-align: center; padding: 6px 12px; border-radius: 4px; font-weight: 800; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px; }
+          .meta-card { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; border: 1px solid #CBD5E1; border-radius: 6px; padding: 12px 16px; margin-bottom: 14px; background-color: #F8FAFC; font-size: 12.5px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12px; border: 1px solid #0F172A; }
+          th { background-color: #0F172A; color: #FFFFFF; border: 1px solid #0F172A; padding: 8px 6px; font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+          td { border: 1px solid #CBD5E1; vertical-align: middle; }
+          .summary-card { width: 44%; font-size: 12.5px; border: 1px solid #CBD5E1; border-radius: 6px; background-color: #F8FAFC; padding: 10px 14px; }
+          .summary-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
         </style>
       </head>
       <body>
-        <div style="position: relative; text-align: center; margin-bottom: 14px;">
-          <div style="position: absolute; right: 0; top: 0; font-size: 13px; font-weight: 600;">S.Nagaraj</div>
-          <h1 style="font-size: 28px; font-weight: 800; margin: 0 0 2px 0;">Dheeksha Trade Link</h1>
-          <div style="font-size: 14px; font-weight: 600; color: #334155;">Sivakasi</div>
+        <div style="position: relative; text-align: center; border-bottom: 2px solid #0F172A; padding-bottom: 8px; margin-bottom: 10px;">
+          <div style="position: absolute; right: 0; top: 0; font-size: 12px; font-weight: 700; color: #475569;">Prepared By: <b>${performa.preparedBy || 'S.Nagaraj'}</b></div>
+          <h1 style="font-size: 26px; font-weight: 900; color: #0B4DB7; margin: 0 0 2px 0; text-transform: uppercase;">Dheeksha Trade Link</h1>
+          <div style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Wholesale & Retail Trading • Sivakasi</div>
         </div>
 
-        <div class="banner">PERFORMA / NOT A TAX INVOICE</div>
+        <div class="banner">PERFORMA INVOICE / QUOTATION (NOT A TAX INVOICE)</div>
 
-        <div style="display: flex; justify-content: space-between; border: 1px solid #CBD5E1; border-radius: 6px; padding: 14px 18px; margin-bottom: 18px; background-color: #F8FAFC; font-size: 13px;">
+        <div class="meta-card">
           <div>
-            <div style="margin-bottom: 6px;"><span style="color: #64748B; font-weight: 600;">Performa No: </span><span style="font-weight: 800; color: #0B4DB7; font-size: 15px;">${performa.performaNumber}</span></div>
-            <div style="margin-bottom: 6px;"><span style="color: #64748B; font-weight: 600;">Date: </span><span style="font-weight: 700;">${performa.date}</span></div>
-            <div><span style="color: #64748B; font-weight: 600;">Status: </span><span style="font-weight: 700;">${performa.status}</span></div>
+            <div style="margin-bottom: 4px;"><span style="color: #64748B; font-weight: 600;">Performa No: </span><span style="font-weight: 900; color: #0B4DB7; font-size: 15px;">#${performa.performaNumber || '-'}</span></div>
+            <div style="margin-bottom: 4px;"><span style="color: #64748B; font-weight: 600;">Date: </span><span style="font-weight: 700;">${performa.date || '-'}</span></div>
+            <div>
+              <span style="color: #64748B; font-weight: 600;">Status: </span>
+              <span style="font-weight: 800; color: ${performa.status === 'ACTIVE' ? '#16A34A' : performa.status === 'PARTIALLY_USED' ? '#D97706' : '#0B4DB7'}; font-size: 11.5px;">
+                ${performa.status || 'ACTIVE'}
+              </span>
+            </div>
           </div>
           <div>
-            <div style="margin-bottom: 4px;"><span style="color: #64748B; font-weight: 600;">Customer: </span><span style="font-weight: 800; font-size: 14px;">${customer.name}</span></div>
-            ${customer.phone ? `<div style="margin-bottom: 4px;"><span style="color: #64748B; font-weight: 600;">Phone: </span><span>${customer.phone}</span></div>` : ''}
+            <div style="margin-bottom: 4px;"><span style="color: #64748B; font-weight: 600;">Customer: </span><span style="font-weight: 800; font-size: 13.5px; color: #0F172A;">${customer.name || '-'}</span></div>
+            ${customer.phone ? `<div style="margin-bottom: 4px;"><span style="color: #64748B; font-weight: 600;">Phone: </span><span style="font-weight: 600;">${customer.phone}</span></div>` : ''}
             ${customer.companyName ? `<div style="margin-bottom: 4px;"><span style="color: #64748B; font-weight: 600;">Company: </span><span>${customer.companyName}</span></div>` : ''}
             ${customer.address ? `<div><span style="color: #64748B; font-weight: 600;">Address: </span><span>${customer.address}</span></div>` : ''}
           </div>
@@ -1092,57 +1303,219 @@ export const generatePerformaHtml = (performa: any): string => {
 
         <table>
           <thead>
-            <tr style="background-color: #F1F5F9; border-bottom: 2px solid #0F172A;">
-              <th style="padding: 8px 6px; text-align: center; width: 35px;">#</th>
-              <th style="padding: 8px 10px; text-align: left;">Product Description</th>
-              <th style="padding: 8px 8px; text-align: center; width: 70px;">Req Cases</th>
-              <th style="padding: 8px 8px; text-align: center; width: 70px;">Remaining</th>
-              <th style="padding: 8px 8px; text-align: right; width: 80px;">Rate (₹)</th>
-              <th style="padding: 8px 8px; text-align: center; width: 60px;">Units</th>
-              <th style="padding: 8px 10px; text-align: right; width: 100px;">Allocated (₹)</th>
+            <tr>
+              <th style="width: 35px; text-align: center;">#</th>
+              <th style="text-align: left;">Product Description</th>
+              <th style="width: 110px; text-align: left;">Company</th>
+              <th style="width: 65px; text-align: center;">Req Cases</th>
+              <th style="width: 65px; text-align: center;">Remaining</th>
+              <th style="width: 80px; text-align: right;">Rate (₹)</th>
+              <th style="width: 55px; text-align: center;">Units</th>
+              <th style="width: 105px; text-align: right;">Amount (₹)</th>
             </tr>
           </thead>
           <tbody>
-            ${productRowsHtml}
+            ${productRowsHtml || '<tr><td colspan="8" style="text-align:center; padding:16px; color:#64748B;">No products allocated.</td></tr>'}
           </tbody>
         </table>
 
-        <div style="display: flex; justify-content: space-between; border-top: 2px solid #0F172A; padding-top: 14px; margin-bottom: 20px;">
-          <div style="width: 55%; font-size: 11.5px; color: #64748B;">
-            ${performa.notes ? `<div style="font-size: 13px; color: #1E293B; margin-bottom: 8px;"><strong>Notes:</strong> <em>${performa.notes}</em></div>` : ''}
-            * This document confirms the reservation and product requirement allocation. Actual billing will consume matching product cases and deduct from the available customer advance.
+        <!-- Summary Section -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 18px; page-break-inside: avoid;">
+          <div style="width: 52%; font-size: 11px; color: #64748B; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 14px; background-color: #FAFAFA;">
+            ${performa.notes ? `<div style="font-size: 12px; color: #1E293B; margin-bottom: 6px;"><strong>Notes / Terms:</strong> <em>${performa.notes}</em></div>` : ''}
+            <div style="line-height: 1.4;">• This quotation reserves product requirement allocation. Billed cases will automatically deduct from available customer advance balance.</div>
           </div>
-          <div style="width: 40%; font-size: 13.5px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span>Total Required Cases:</span><strong>${performa.totalRequiredCases}</strong>
+
+          <div class="summary-card">
+            <div class="summary-row">
+              <span style="color:#475569;">Total Required Cases:</span><strong style="color:#0F172A;">${performa.totalRequiredCases || performa.totalCases || 0}</strong>
             </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span>Total Allocated Value:</span><strong>₹${formatCurrency(performa.totalAllocatedAmount)}</strong>
+            <div class="summary-row">
+              <span style="color:#475569;">Total Allocated Value:</span><strong style="color:#0F172A;">₹ ${formatCurrency(performa.totalAllocatedAmount || performa.totalAmount || 0)}</strong>
             </div>
-            <div style="height: 1px; background: #E2E8F0; margin: 8px 0;"></div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #0B4DB7;">
-              <strong>Customer Advance:</strong><strong>₹${formatCurrency(performa.advanceAmount)}</strong>
+            <div style="height: 1px; background: #CBD5E1; margin: 6px 0;"></div>
+            <div class="summary-row" style="color: #0B4DB7;">
+              <span style="font-weight: 700;">Customer Advance:</span><strong style="font-weight: 800;">₹ ${formatCurrency(performa.advanceAmount || 0)}</strong>
             </div>
-            ${performa.advanceUsedAmount ? `<div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #DC2626;"><span>Advance Consumed:</span><strong>-₹${formatCurrency(performa.advanceUsedAmount)}</strong></div>` : ''}
-            <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 2px solid #0B4DB7; margin-top: 6px; font-size: 15px; color: #166534;">
-              <strong>Remaining Advance:</strong><strong>₹${formatCurrency(performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : performa.advanceAmount)}</strong>
+            ${performa.advanceUsedAmount ? `
+            <div class="summary-row" style="color: #DC2626;">
+              <span>Advance Consumed:</span><strong style="font-weight: 700;">- ₹ ${formatCurrency(performa.advanceUsedAmount)}</strong>
+            </div>` : ''}
+            <div class="summary-row" style="padding-top: 6px; border-top: 2px solid #0B4DB7; margin-top: 4px; font-size: 13.5px; color: #166534;">
+              <span style="font-weight: 800;">Remaining Advance:</span><strong style="font-weight: 900;">₹ ${formatCurrency(performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : performa.advanceAmount)}</strong>
             </div>
           </div>
         </div>
 
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 36px; padding-top: 16px; border-top: 1px dashed #CBD5E1; font-size: 12px;">
-          <div style="text-align: center;">
-            <div style="height: 32px;"></div>
-            <div style="border-top: 1px solid #000; width: 150px; padding-top: 4px; font-weight: 600;">Customer Signature</div>
+        <!-- Signatures -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 28px; padding-top: 14px; border-top: 1px dashed #CBD5E1; font-size: 11px; page-break-inside: avoid;">
+          <div style="text-align: center; width: 160px;">
+            <div style="height: 28px;"></div>
+            <div style="border-top: 1px solid #0F172A; padding-top: 4px; font-weight: 700;">Customer Signature</div>
           </div>
-          <div style="text-align: center;">
-            <div style="font-weight: 700; margin-bottom: 20px;">For Dheeksha Trade Link</div>
-            <div style="border-top: 1px solid #000; width: 160px; padding-top: 4px; font-weight: 600;">Authorized Signatory</div>
+          <div style="text-align: center; width: 160px;">
+            <div style="font-weight: 700; margin-bottom: 24px;">For Dheeksha Trade Link</div>
+            <div style="border-top: 1px solid #0F172A; padding-top: 4px; font-weight: 700;">Authorized Signatory</div>
           </div>
         </div>
       </body>
     </html>
   `;
+};
+
+/**
+ * Print All Performas Master List (A4 Standard)
+ */
+export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'PERFORMAS MASTER SUMMARY', dateRangeText?: string): string => {
+  const currentDate = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
+  let totalCases = 0;
+  let totalValue = 0;
+  let totalAdvance = 0;
+  let totalRemainingAdv = 0;
+
+  const rowsHtml = performas.map((p, idx) => {
+    const cases = parseFloat(String(p.totalRequiredCases || p.totalCases || 0)) || 0;
+    const value = parseFloat(String(p.totalAllocatedAmount || p.totalAmount || 0)) || 0;
+    const adv = parseFloat(String(p.advanceAmount || 0)) || 0;
+    const remAdv = parseFloat(String(p.remainingAdvanceAmount !== undefined ? p.remainingAdvanceAmount : p.advanceAmount || 0)) || 0;
+    const custName = p.customerSnapshot?.name || p.customerName || '-';
+    const compName = p.companyName || p.customerSnapshot?.companyName || '-';
+    const isEven = idx % 2 === 1;
+
+    totalCases += cases;
+    totalValue += value;
+    totalAdvance += adv;
+    totalRemainingAdv += remAdv;
+
+    return `
+      <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
+        <td class="text-center" style="width:35px; border: 1px solid #CBD5E1; padding: 6px 4px; color:#64748B;">${idx + 1}</td>
+        <td class="text-center" style="font-weight:800; color:#0B4DB7; width:80px; border: 1px solid #CBD5E1; padding: 6px;">#${p.performaNumber || '-'}</td>
+        <td class="text-center" style="width:80px; border: 1px solid #CBD5E1; padding: 6px; color:#334155;">${p.date || '-'}</td>
+        <td style="font-weight:700; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">${custName}</td>
+        <td style="border: 1px solid #CBD5E1; padding: 6px 8px; color:#475569;">${compName}</td>
+        <td class="text-center" style="width:60px; font-weight:800; border: 1px solid #CBD5E1; padding: 6px;">${cases}</td>
+        <td class="text-center" style="width:75px; border: 1px solid #CBD5E1; padding: 6px; font-size:10.5px; font-weight:700; color:${p.status === 'ACTIVE' ? '#16A34A' : '#D97706'};">${p.status || 'ACTIVE'}</td>
+        <td class="text-right" style="font-weight:700; width:100px; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right" style="font-weight:700; width:100px; color:#0B4DB7; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${adv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right" style="font-weight:800; width:105px; color:#166534; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${remAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${reportTitle} - ${currentDate}</title>
+  <style>
+    @page { size: A4 landscape; margin: 8mm 10mm; }
+    *, *:before, *:after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #0F172A; margin:0; padding:8px; background:#fff; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0F172A; padding-bottom: 8px; margin-bottom: 10px; }
+    .title { font-size: 24px; font-weight: 900; color: #0B4DB7; letter-spacing: -0.01em; }
+    .date-badge { display: inline-block; background: #EFF6FF; color: #0B4DB7; border: 1px solid #BFDBFE; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-top: 4px; }
+    .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+    .kpi-box { border: 1px solid #CBD5E1; border-radius: 6px; padding: 7px 12px; background: #F8FAFC; }
+    .kpi-lbl { font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase; }
+    .kpi-num { font-size: 14.5px; font-weight: 900; margin-top: 2px; color: #0F172A; }
+    .table { width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #0F172A; }
+    .table th { background: #0F172A; color: #FFFFFF; border: 1px solid #0F172A; padding: 6px; font-weight: 800; font-size: 10.5px; text-transform: uppercase; }
+    .table td { border: 1px solid #CBD5E1; padding: 5px 6px; }
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .totals td { background: #0F172A !important; color: #FFFFFF !important; border: 1px solid #0F172A !important; font-weight: 900; font-size: 11.5px; padding: 7px 6px; }
+    .sig-section { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 22px; padding-top: 12px; border-top: 1px dashed #CBD5E1; font-size: 11px; page-break-inside: avoid; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="title">DHEEKSHA TRADE LINK</div>
+      <div style="font-size:10.5px; font-weight:700; color:#475569; text-transform:uppercase;">Wholesale & Retail Trading • Sivakasi</div>
+      <h2 style="font-size:15px; font-weight:800; margin-top:4px; color:#0F172A;">${reportTitle}</h2>
+      ${dateRangeText ? `<div class="date-badge">${dateRangeText}</div>` : ''}
+    </div>
+    <div style="text-align:right; font-size:11.5px; color:#334155;">
+      <div>Generated Date: <b>${currentDate}</b></div>
+      <div>Total Records: <b>${performas.length} Performas</b></div>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-row">
+    <div class="kpi-box">
+      <div class="kpi-lbl">Total Performas</div>
+      <div class="kpi-num">${performas.length}</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-lbl">Total Req Cases</div>
+      <div class="kpi-num" style="color:#0B4DB7;">${totalCases}</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-lbl">Total Allocated Value</div>
+      <div class="kpi-num" style="color:#0F172A;">₹ ${totalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+    </div>
+    <div class="kpi-box" style="background-color:#F0FDF4; border-color:#BBF7D0;">
+      <div class="kpi-lbl" style="color:#166534;">Remaining Advance Balance</div>
+      <div class="kpi-num" style="color:#16A34A;">₹ ${totalRemainingAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+    </div>
+  </div>
+
+  <table class="table">
+    <thead>
+      <tr>
+        <th class="text-center" style="width:35px;">#</th>
+        <th class="text-center" style="width:80px;">Performa #</th>
+        <th class="text-center" style="width:80px;">Date</th>
+        <th>Customer Name</th>
+        <th>Company</th>
+        <th class="text-center" style="width:60px;">Cases</th>
+        <th class="text-center" style="width:75px;">Status</th>
+        <th class="text-right" style="width:100px;">Total Value</th>
+        <th class="text-right" style="width:100px;">Advance</th>
+        <th class="text-right" style="width:105px;">Rem. Advance</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml || '<tr><td colspan="10" class="text-center" style="padding:18px; color:#64748B;">No performa records found for the selected period.</td></tr>'}
+    </tbody>
+    <tfoot>
+      <tr class="totals">
+        <td colspan="5" class="text-right" style="padding-right:10px;">GRAND TOTALS (${performas.length} Performas):</td>
+        <td class="text-center">${totalCases}</td>
+        <td></td>
+        <td class="text-right">₹ ${totalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right">₹ ${totalAdvance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right">₹ ${totalRemainingAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <!-- Signatures -->
+  <div class="sig-section">
+    <div style="text-align:center; width:150px;">
+      <div style="height:24px;"></div>
+      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Prepared By</div>
+    </div>
+    <div style="text-align:center; width:150px;">
+      <div style="height:24px;"></div>
+      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Checked & Verified</div>
+    </div>
+    <div style="text-align:center; width:150px;">
+      <div style="font-weight:700; margin-bottom:20px;">For Dheeksha Trade Link</div>
+      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Authorized Signatory</div>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+};
+
+export const printAllPerformasDirectly = (performas: any[], reportTitle?: string, dateRangeText?: string) => {
+  const htmlContent = generateAllPerformasPrintHtml(performas, reportTitle, dateRangeText);
+  triggerBrowserPrint(htmlContent);
 };
 
 export const printPerformaDirectly = (performa: any) => {

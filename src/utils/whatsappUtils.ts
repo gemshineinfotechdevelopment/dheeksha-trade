@@ -4,6 +4,7 @@ import {
   generateLedgerStatementHtml,
   generateParticularsListPrintHtml,
   generatePerformaHtml,
+  generateAllPerformasPrintHtml,
 } from './printUtils';
 import type { BillPrintData } from '../components/BillPrintTemplate';
 
@@ -330,7 +331,7 @@ _Generated on ${new Date().toLocaleDateString('en-GB')}_
 *Dheeksha Trade*`;
 
   const rangeLabel = fromDate || toDate ? `${fromDate || ''} - ${toDate || ''}` : undefined;
-  const html = generateParticularsListPrintHtml(performas, rangeLabel);
+  const html = generateAllPerformasPrintHtml(performas, summaryTitle, rangeLabel);
   await shareToWhatsApp({
     title: `Performa Summary - ${summaryTitle}`,
     text,

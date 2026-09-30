@@ -199,90 +199,132 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
         style={{
           width: '100%',
           borderCollapse: 'collapse',
-          marginBottom: '18px',
-          fontSize: '13px',
+          border: '1px solid #0F172A',
+          marginBottom: '16px',
+          fontSize: '12px',
         }}
       >
         <thead>
-          <tr style={{ backgroundColor: '#F1F5F9', borderBottom: '2px solid #0F172A' }}>
-            <th style={{ padding: '8px 6px', textAlign: 'center', width: '35px', fontWeight: 700 }}>#</th>
-            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700 }}>Product Description</th>
-            <th style={{ padding: '8px 8px', textAlign: 'left', width: '130px', fontWeight: 700 }}>Company / Brand</th>
-            <th style={{ padding: '8px 8px', textAlign: 'center', width: '80px', fontWeight: 700 }}>Cases</th>
-            <th style={{ padding: '8px 8px', textAlign: 'right', width: '90px', fontWeight: 700 }}>Rate (₹)</th>
-            <th style={{ padding: '8px 8px', textAlign: 'center', width: '60px', fontWeight: 700 }}>Units</th>
-            <th style={{ padding: '8px 10px', textAlign: 'right', width: '110px', fontWeight: 700 }}>Amount (₹)</th>
+          <tr style={{ backgroundColor: '#0F172A', color: '#FFFFFF' }}>
+            <th style={{ padding: '8px 6px', textAlign: 'center', width: '35px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>#</th>
+            <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Product Description</th>
+            <th style={{ padding: '8px 8px', textAlign: 'left', width: '120px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Company</th>
+            <th style={{ padding: '8px 6px', textAlign: 'center', width: '70px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Cases</th>
+            <th style={{ padding: '8px 6px', textAlign: 'center', width: '70px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Remaining</th>
+            <th style={{ padding: '8px 8px', textAlign: 'right', width: '80px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Rate (₹)</th>
+            <th style={{ padding: '8px 6px', textAlign: 'center', width: '55px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Units</th>
+            <th style={{ padding: '8px 10px', textAlign: 'right', width: '105px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Amount (₹)</th>
           </tr>
         </thead>
         <tbody>
-          {(performa.products || []).map((item, index) => (
-            <tr key={index} style={{ borderBottom: '1px solid #E2E8F0' }}>
-              <td style={{ padding: '8px 6px', textAlign: 'center', color: '#64748B' }}>{index + 1}</td>
-              <td style={{ padding: '8px 10px' }}>
-                <div style={{ fontWeight: 700, color: '#0F172A' }}>{item.productName}</div>
-                {item.productCode && (
-                  <div style={{ fontSize: '11px', color: '#64748B' }}>Code: {item.productCode}</div>
-                )}
-              </td>
-              <td style={{ padding: '8px 8px', color: '#0B4DB7', fontWeight: 600 }}>
-                {item.companyName || performa.companyName || '-'}
-              </td>
-              <td style={{ padding: '8px 8px', textAlign: 'center', fontWeight: 800, color: '#0F172A' }}>
-                {item.requiredCases}
-              </td>
-              <td style={{ padding: '8px 8px', textAlign: 'right' }}>₹{formatCurrency(item.rate)}</td>
-              <td style={{ padding: '8px 8px', textAlign: 'center' }}>{item.pktPerUnit || 1}</td>
-              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700 }}>
-                ₹{formatCurrency(item.allocatedAmount)}
+          {(performa.products || []).length === 0 ? (
+            <tr>
+              <td colSpan={8} style={{ padding: '16px', textAlign: 'center', color: '#64748B', border: '1px solid #CBD5E1' }}>
+                No products allocated.
               </td>
             </tr>
-          ))}
+          ) : (
+            (performa.products || []).map((item, index) => {
+              const isEven = index % 2 === 1;
+              return (
+                <tr key={index} style={{ backgroundColor: isEven ? '#F8FAFC' : '#FFFFFF' }}>
+                  <td style={{ padding: '7px 6px', textAlign: 'center', color: '#475569', border: '1px solid #CBD5E1', fontWeight: 600 }}>{index + 1}</td>
+                  <td style={{ padding: '7px 10px', border: '1px solid #CBD5E1' }}>
+                    <div style={{ fontWeight: 700, color: '#0F172A' }}>{item.productName}</div>
+                    {item.productCode && (
+                      <div style={{ fontSize: '10.5px', color: '#64748B' }}>Code: {item.productCode}</div>
+                    )}
+                  </td>
+                  <td style={{ padding: '7px 8px', color: '#0B4DB7', fontWeight: 600, border: '1px solid #CBD5E1', fontSize: '11.5px' }}>
+                    {item.companyName || performa.companyName || '-'}
+                  </td>
+                  <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: 800, color: '#0F172A', border: '1px solid #CBD5E1' }}>
+                    {item.requiredCases}
+                  </td>
+                  <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: 700, color: '#0B4DB7', border: '1px solid #CBD5E1' }}>
+                    {item.remainingCases !== undefined ? item.remainingCases : item.requiredCases}
+                  </td>
+                  <td style={{ padding: '7px 8px', textAlign: 'right', border: '1px solid #CBD5E1', color: '#334155' }}>₹ {formatCurrency(item.rate)}</td>
+                  <td style={{ padding: '7px 6px', textAlign: 'center', border: '1px solid #CBD5E1', color: '#64748B' }}>{item.pktPerUnit || 1}</td>
+                  <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: '#0F172A', border: '1px solid #CBD5E1' }}>
+                    ₹ {formatCurrency(item.allocatedAmount)}
+                  </td>
+                </tr>
+              );
+            })
+          )}
         </tbody>
       </table>
 
       {/* Summary Box & Financial Breakdown */}
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: '1.2fr 1fr',
-          gap: '20px',
-          borderTop: '2px solid #0F172A',
-          paddingTop: '14px',
-          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: '18px',
+          marginTop: '10px',
+          marginBottom: '16px',
         }}
       >
-        <div>
+        <div style={{ width: '52%', fontSize: '11px', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '10px 14px', backgroundColor: '#FAFAFA' }}>
           {performa.notes && (
-            <div style={{ marginBottom: '10px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Notes / Remarks:</div>
-              <div style={{ fontSize: '13px', color: '#1E293B', fontStyle: 'italic' }}>{performa.notes}</div>
+            <div style={{ marginBottom: '6px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B' }}>Notes: <em>{performa.notes}</em></div>
             </div>
           )}
-          <div style={{ fontSize: '11.5px', color: '#64748B', lineHeight: '1.4' }}>
-            * This document represents the customer performa and product requirement record entered for reference.
+          <div style={{ lineHeight: '1.4' }}>
+            • This quotation reserves product requirement allocation. Billed cases will automatically deduct from available customer advance balance.
           </div>
         </div>
 
-        <div style={{ borderLeft: '1px solid #CBD5E1', paddingLeft: '18px', fontSize: '13.5px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-            <span style={{ color: '#475569' }}>Total Cases:</span>
-            <span style={{ fontWeight: 800 }}>{performa.totalRequiredCases}</span>
+        <div style={{ width: '44%', fontSize: '12.5px', border: '1px solid #CBD5E1', borderRadius: '6px', backgroundColor: '#F8FAFC', padding: '10px 14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+            <span style={{ color: '#475569' }}>Total Required Cases:</span>
+            <strong style={{ color: '#0F172A' }}>{performa.totalRequiredCases}</strong>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-            <span style={{ color: '#475569' }}>Total Amount:</span>
-            <span style={{ fontWeight: 800 }}>₹{formatCurrency(performa.totalAllocatedAmount)}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+            <span style={{ color: '#475569' }}>Total Allocated Value:</span>
+            <strong style={{ color: '#0F172A' }}>₹ {formatCurrency(performa.totalAllocatedAmount)}</strong>
           </div>
-          <div style={{ height: '1px', backgroundColor: '#E2E8F0', margin: '8px 0' }} />
+          <div style={{ height: '1px', backgroundColor: '#CBD5E1', margin: '6px 0' }} />
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              marginBottom: '5px',
+              color: '#0B4DB7',
+            }}
+          >
+            <span style={{ fontWeight: 700 }}>Customer Advance:</span>
+            <strong style={{ fontWeight: 800 }}>₹ {formatCurrency(performa.advanceAmount)}</strong>
+          </div>
+          {performa.advanceUsedAmount ? (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginBottom: '5px',
+                color: '#DC2626',
+              }}
+            >
+              <span>Advance Consumed:</span>
+              <strong style={{ fontWeight: 700 }}>- ₹ {formatCurrency(performa.advanceUsedAmount)}</strong>
+            </div>
+          ) : null}
           <div
             style={{
               display: 'flex',
               justifyContent: 'space-between',
               paddingTop: '6px',
               borderTop: '2px solid #0B4DB7',
+              marginTop: '4px',
+              fontSize: '13.5px',
+              color: '#166534',
             }}
           >
-            <span style={{ color: '#0B4DB7', fontWeight: 800, fontSize: '15px' }}>Advance Received:</span>
-            <span style={{ fontWeight: 800, color: '#0B4DB7', fontSize: '15px' }}>₹{formatCurrency(performa.advanceAmount)}</span>
+            <span style={{ fontWeight: 800 }}>Remaining Advance:</span>
+            <strong style={{ fontWeight: 900 }}>₹ {formatCurrency(performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : performa.advanceAmount)}</strong>
           </div>
         </div>
       </div>
@@ -293,21 +335,21 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'flex-end',
-          marginTop: '36px',
-          paddingTop: '16px',
+          marginTop: '28px',
+          paddingTop: '14px',
           borderTop: '1px dashed #CBD5E1',
-          fontSize: '12px',
+          fontSize: '11px',
         }}
       >
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ height: '32px' }} />
-          <div style={{ borderTop: '1px solid #000', width: '150px', paddingTop: '4px', fontWeight: 600 }}>
+        <div style={{ textAlign: 'center', width: '160px' }}>
+          <div style={{ height: '28px' }} />
+          <div style={{ borderTop: '1px solid #0F172A', paddingTop: '4px', fontWeight: 700 }}>
             Customer Signature
           </div>
         </div>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: 700, marginBottom: '20px' }}>For Dheeksha Trade Link</div>
-          <div style={{ borderTop: '1px solid #000', width: '160px', paddingTop: '4px', fontWeight: 600 }}>
+        <div style={{ textAlign: 'center', width: '160px' }}>
+          <div style={{ fontWeight: 700, marginBottom: '24px' }}>For Dheeksha Trade Link</div>
+          <div style={{ borderTop: '1px solid #0F172A', paddingTop: '4px', fontWeight: 700 }}>
             Authorized Signatory
           </div>
         </div>
