@@ -34,6 +34,7 @@ import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceW
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import {
@@ -116,6 +117,13 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
   const [rate, setRate] = useState<string>('');
   const [pkt, setPkt] = useState<string>('');
   const [productRows, setProductRows] = useState<ProductRowItem[]>([]);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editRowData, setEditRowData] = useState<{
+    particular: string;
+    quantity: string;
+    rate: string;
+    pktUnit: string;
+  }>({ particular: '', quantity: '', rate: '', pktUnit: '' });
   const [createLoading, setCreateLoading] = useState(false);
 
   // Subtab 3: Account Details State
@@ -392,6 +400,50 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
     setQuantity('');
     setRate('');
     setPkt('');
+  };
+
+  // Start editing a product row
+  const handleStartEditRow = (row: ProductRowItem) => {
+    setEditingRowId(row.id);
+    setEditRowData({
+      particular: row.particular,
+      quantity: row.quantity,
+      rate: row.rate,
+      pktUnit: row.pktUnit === '-' ? '' : row.pktUnit,
+    });
+  };
+
+  // Save edited product row
+  const handleSaveEditRow = (id: string) => {
+    if (!editRowData.particular || !editRowData.quantity || !editRowData.rate) {
+      alert('Please enter Product, Cases, and Rate');
+      return;
+    }
+    const caseVal = parseFloat(editRowData.quantity) || 0;
+    const piecesPerCase = parseFloat(editRowData.pktUnit) || 1;
+    const totalPieces = caseVal * (piecesPerCase > 0 ? piecesPerCase : 1);
+    const lineAmt = (totalPieces * (parseFloat(editRowData.rate) || 0)).toFixed(2);
+
+    setProductRows((prev) =>
+      prev.map((row) =>
+        row.id === id
+          ? {
+              ...row,
+              particular: editRowData.particular.trim(),
+              quantity: editRowData.quantity.trim(),
+              rate: editRowData.rate.trim(),
+              pktUnit: editRowData.pktUnit.trim() !== '' ? editRowData.pktUnit.trim() : '-',
+              amount: lineAmt,
+            }
+          : row
+      )
+    );
+    setEditingRowId(null);
+  };
+
+  // Cancel editing product row
+  const handleCancelEditRow = () => {
+    setEditingRowId(null);
   };
 
   // Real-time Performa Allocation Matching for Current Product
@@ -1936,34 +1988,306 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                 </TableHead>
                 <TableBody>
                   {productRows.length > 0 ? (
-                    productRows.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell sx={{ borderBottom: '1px solid #E2E8F0', borderRight: '1px solid #E2E8F0', fontWeight: 600, fontSize: '13px', color: '#0F172A' }}>
-                          {row.particular}
-                        </TableCell>
-                        <TableCell align="center" sx={{ borderBottom: '1px solid #E2E8F0', borderRight: '1px solid #E2E8F0', fontWeight: 500, fontSize: '13px' }}>
-                          {row.quantity}
-                        </TableCell>
-                        <TableCell align="center" sx={{ borderBottom: '1px solid #E2E8F0', borderRight: '1px solid #E2E8F0', fontWeight: 500, fontSize: '13px' }}>
-                          {row.rate}
-                        </TableCell>
-                        <TableCell align="center" sx={{ borderBottom: '1px solid #E2E8F0', borderRight: '1px solid #E2E8F0', fontWeight: 500, fontSize: '13px' }}>
-                          {row.pktUnit}
-                        </TableCell>
-                        <TableCell align="center" sx={{ borderBottom: '1px solid #E2E8F0', borderRight: '1px solid #E2E8F0', fontWeight: 600, fontSize: '13px' }}>
-                          {row.amount}
-                        </TableCell>
-                        <TableCell align="center" sx={{ borderBottom: '1px solid #E2E8F0' }}>
-                          <IconButton
-                            size="small"
-                            onClick={() => setProductRows((prev) => prev.filter((p) => p.id !== row.id))}
-                            sx={{ color: '#DC2626', p: 0.3 }}
+                    productRows.map((row) => {
+                      const isEditing = editingRowId === row.id;
+                      const liveAmount = isEditing
+                        ? (
+                            (parseFloat(editRowData.quantity) || 0) *
+                            (parseFloat(editRowData.pktUnit) || 1) *
+                            (parseFloat(editRowData.rate) || 0)
+                          ).toFixed(2)
+                        : row.amount;
+
+                      return (
+                        <TableRow
+                          key={row.id}
+                          sx={{
+                            backgroundColor: isEditing ? '#F8FAFC' : 'inherit',
+                            '&:hover': {
+                              backgroundColor: isEditing ? '#F1F5F9' : '#FAFAFA',
+                            },
+                          }}
+                        >
+                          <TableCell
+                            sx={{
+                              borderBottom: '1px solid #E2E8F0',
+                              borderRight: '1px solid #E2E8F0',
+                              fontWeight: 600,
+                              fontSize: '13px',
+                              color: '#0F172A',
+                              py: isEditing ? 0.8 : 1.2,
+                            }}
                           >
-                            <DeleteOutlineRoundedIcon sx={{ fontSize: 16 }} />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                            {isEditing ? (
+                              <Autocomplete
+                                freeSolo
+                                size="small"
+                                options={productOptions.map((p) => p.name)}
+                                value={editRowData.particular}
+                                onInputChange={(_e, val) =>
+                                  setEditRowData((prev) => ({ ...prev, particular: val || '' }))
+                                }
+                                onChange={(_e, val) =>
+                                  setEditRowData((prev) => ({ ...prev, particular: val || '' }))
+                                }
+                                renderInput={(params) => (
+                                  <TextField
+                                    {...params}
+                                    size="small"
+                                    placeholder="Product Name"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleSaveEditRow(row.id);
+                                      } else if (e.key === 'Escape') {
+                                        handleCancelEditRow();
+                                      }
+                                    }}
+                                    sx={{
+                                      backgroundColor: '#FFFFFF',
+                                      '& .MuiInputBase-input': {
+                                        fontSize: '12.5px',
+                                        fontWeight: 600,
+                                        py: 0.5,
+                                      },
+                                    }}
+                                  />
+                                )}
+                                sx={{ minWidth: '140px' }}
+                              />
+                            ) : (
+                              row.particular
+                            )}
+                          </TableCell>
+
+                          <TableCell
+                            align="center"
+                            sx={{
+                              borderBottom: '1px solid #E2E8F0',
+                              borderRight: '1px solid #E2E8F0',
+                              fontWeight: 600,
+                              fontSize: '13px',
+                              py: isEditing ? 0.8 : 1.2,
+                            }}
+                          >
+                            {isEditing ? (
+                              <TextField
+                                size="small"
+                                type="number"
+                                value={editRowData.quantity}
+                                onChange={(e) =>
+                                  setEditRowData((prev) => ({ ...prev, quantity: e.target.value }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveEditRow(row.id);
+                                  } else if (e.key === 'Escape') {
+                                    handleCancelEditRow();
+                                  }
+                                }}
+                                slotProps={{
+                                  input: {
+                                    sx: {
+                                      fontSize: '13px',
+                                      fontWeight: 700,
+                                      textAlign: 'center',
+                                      backgroundColor: '#FFFFFF',
+                                      '& input': { textAlign: 'center', py: 0.5, px: 0.5 },
+                                    },
+                                  },
+                                }}
+                                sx={{ width: '80px' }}
+                              />
+                            ) : (
+                              row.quantity
+                            )}
+                          </TableCell>
+
+                          <TableCell
+                            align="center"
+                            sx={{
+                              borderBottom: '1px solid #E2E8F0',
+                              borderRight: '1px solid #E2E8F0',
+                              fontWeight: 600,
+                              fontSize: '13px',
+                              py: isEditing ? 0.8 : 1.2,
+                            }}
+                          >
+                            {isEditing ? (
+                              <TextField
+                                size="small"
+                                type="number"
+                                value={editRowData.rate}
+                                onChange={(e) =>
+                                  setEditRowData((prev) => ({ ...prev, rate: e.target.value }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveEditRow(row.id);
+                                  } else if (e.key === 'Escape') {
+                                    handleCancelEditRow();
+                                  }
+                                }}
+                                slotProps={{
+                                  input: {
+                                    sx: {
+                                      fontSize: '13px',
+                                      fontWeight: 700,
+                                      textAlign: 'center',
+                                      backgroundColor: '#FFFFFF',
+                                      '& input': { textAlign: 'center', py: 0.5, px: 0.5 },
+                                    },
+                                  },
+                                }}
+                                sx={{ width: '85px' }}
+                              />
+                            ) : (
+                              row.rate
+                            )}
+                          </TableCell>
+
+                          <TableCell
+                            align="center"
+                            sx={{
+                              borderBottom: '1px solid #E2E8F0',
+                              borderRight: '1px solid #E2E8F0',
+                              fontWeight: 600,
+                              fontSize: '13px',
+                              py: isEditing ? 0.8 : 1.2,
+                            }}
+                          >
+                            {isEditing ? (
+                              <TextField
+                                size="small"
+                                type="number"
+                                placeholder="1"
+                                value={editRowData.pktUnit}
+                                onChange={(e) =>
+                                  setEditRowData((prev) => ({ ...prev, pktUnit: e.target.value }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveEditRow(row.id);
+                                  } else if (e.key === 'Escape') {
+                                    handleCancelEditRow();
+                                  }
+                                }}
+                                slotProps={{
+                                  input: {
+                                    sx: {
+                                      fontSize: '13px',
+                                      fontWeight: 700,
+                                      textAlign: 'center',
+                                      backgroundColor: '#FFFFFF',
+                                      '& input': { textAlign: 'center', py: 0.5, px: 0.5 },
+                                    },
+                                  },
+                                }}
+                                sx={{ width: '70px' }}
+                              />
+                            ) : (
+                              row.pktUnit
+                            )}
+                          </TableCell>
+
+                          <TableCell
+                            align="center"
+                            sx={{
+                              borderBottom: '1px solid #E2E8F0',
+                              borderRight: '1px solid #E2E8F0',
+                              fontWeight: 700,
+                              fontSize: '13px',
+                              color: isEditing ? '#0B4DB7' : '#0F172A',
+                              py: isEditing ? 0.8 : 1.2,
+                            }}
+                          >
+                            ₹{parseFloat(liveAmount || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </TableCell>
+
+                          <TableCell align="center" sx={{ borderBottom: '1px solid #E2E8F0', py: isEditing ? 0.8 : 1.2 }}>
+                            {isEditing ? (
+                              <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 0.6 }}>
+                                <Tooltip title="Save (Enter)" arrow>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleSaveEditRow(row.id)}
+                                    sx={{
+                                      backgroundColor: '#16A34A',
+                                      color: '#FFFFFF',
+                                      borderRadius: '5px',
+                                      width: '26px',
+                                      height: '26px',
+                                      p: 0,
+                                      '&:hover': { backgroundColor: '#15803D' },
+                                    }}
+                                  >
+                                    <CheckRoundedIcon sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Cancel (Esc)" arrow>
+                                  <IconButton
+                                    size="small"
+                                    onClick={handleCancelEditRow}
+                                    sx={{
+                                      backgroundColor: '#F1F5F9',
+                                      color: '#64748B',
+                                      borderRadius: '5px',
+                                      width: '26px',
+                                      height: '26px',
+                                      p: 0,
+                                      '&:hover': { backgroundColor: '#E2E8F0', color: '#0F172A' },
+                                    }}
+                                  >
+                                    <CloseRoundedIcon sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                </Tooltip>
+                              </Box>
+                            ) : (
+                              <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 0.6 }}>
+                                <Tooltip title="Edit Product Item (Cases, Rate, Pkt/Unit)" arrow>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleStartEditRow(row)}
+                                    sx={{
+                                      backgroundColor: '#EFF6FF',
+                                      color: '#0B4DB7',
+                                      borderRadius: '5px',
+                                      width: '26px',
+                                      height: '26px',
+                                      p: 0,
+                                      '&:hover': { backgroundColor: '#DBEAFE' },
+                                    }}
+                                  >
+                                    <ModeEditOutlineRoundedIcon sx={{ fontSize: 15 }} />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Delete Item" arrow>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => setProductRows((prev) => prev.filter((p) => p.id !== row.id))}
+                                    sx={{
+                                      backgroundColor: '#FEF2F2',
+                                      color: '#DC2626',
+                                      borderRadius: '5px',
+                                      width: '26px',
+                                      height: '26px',
+                                      p: 0,
+                                      '&:hover': { backgroundColor: '#FEE2E2' },
+                                    }}
+                                  >
+                                    <DeleteOutlineRoundedIcon sx={{ fontSize: 15 }} />
+                                  </IconButton>
+                                </Tooltip>
+                              </Box>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   ) : (
                     <>
                       <TableRow sx={{ height: '65px' }}>
