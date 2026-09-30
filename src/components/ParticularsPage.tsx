@@ -37,6 +37,7 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
   CustomersApi,
   CompaniesApi,
@@ -48,6 +49,11 @@ import {
 import { BillPrintModal } from './BillPrintModal';
 import type { BillPrintData } from './BillPrintTemplate';
 import { printBillDirectly, printLedgerStatementDirectly, printParticularsListDirectly } from '../utils/printUtils';
+import {
+  shareBillOnWhatsApp,
+  shareLedgerOnWhatsApp,
+  shareParticularsListOnWhatsApp,
+} from '../utils/whatsappUtils';
 import { DateRangePrintModal } from './DateRangePrintModal';
 
 export type ParticularSubTab =
@@ -742,6 +748,57 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
       printBillDirectly(formattedBill);
     } else {
       setPrintModalOpen(true);
+    }
+  };
+
+  // WhatsApp Share Handlers
+  const handleShareBillWhatsApp = async (billData: any) => {
+    try {
+      const formattedBill: BillPrintData = {
+        billNo: billData.billNo || '',
+        customerName: billData.customerName || 'General',
+        companyName: billData.companyName || '',
+        preparedBy: 'S.Nagaraj',
+        phone: billData.phone || '+91 98765 43210',
+        email: 'info@dheekshatrade.com',
+        website: 'www.dheekshatrade.com',
+        transport: billData.transport && billData.transport !== '-' ? billData.transport : '-',
+        caseCount: billData.caseCount || '0',
+        date: billData.date || new Date().toISOString().split('T')[0],
+        products: (billData.products || []).map((p: any) => ({
+          particular: p.particular || p.particularName || p.name || 'Product',
+          quantity: String(p.quantity || '0'),
+          rate: String(p.rate || '0'),
+          pktUnit: p.pktUnit || p.pkt || '-',
+          amount: String(p.amount || '0'),
+        })),
+        amount: billData.amount || '0.00',
+        discount: billData.discount !== undefined && billData.discount !== null ? String(billData.discount) : '0',
+        packing: billData.packing !== undefined && billData.packing !== null ? String(billData.packing) : '0',
+        tax: billData.tax !== undefined && billData.tax !== null ? String(billData.tax) : '0',
+        total: billData.total || billData.amount || '0.00',
+      };
+      await shareBillOnWhatsApp(formattedBill);
+    } catch (err) {
+      console.error('Failed to share bill on WhatsApp:', err);
+    }
+  };
+
+  const handleShareParticularsListWhatsApp = async () => {
+    try {
+      const cust = filterCustomer || currentCustomerName || 'All Customers';
+      await shareParticularsListOnWhatsApp(cust, particularDetails);
+    } catch (err) {
+      console.error('Failed to share particulars on WhatsApp:', err);
+    }
+  };
+
+  const handleShareLedgerWhatsApp = async () => {
+    try {
+      const cust = filterCustomer || currentCustomerName || 'All Customers';
+      await shareLedgerOnWhatsApp(cust, accountDetails);
+    } catch (err) {
+      console.error('Failed to share ledger on WhatsApp:', err);
     }
   };
 
@@ -2511,6 +2568,28 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                 <Button
                   variant="contained"
                   disableElevation
+                  onClick={handleShareLedgerWhatsApp}
+                  startIcon={<WhatsAppIcon sx={{ fontSize: '18px !important', color: '#FFFFFF' }} />}
+                  sx={{
+                    backgroundColor: '#25D366',
+                    color: '#FFFFFF',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    textTransform: 'none',
+                    px: 2,
+                    py: 0.7,
+                    borderRadius: '6px',
+                    lineHeight: 1.2,
+                    '&:hover': {
+                      backgroundColor: '#1EBE5D',
+                    },
+                  }}
+                >
+                  Share on WhatsApp
+                </Button>
+                <Button
+                  variant="contained"
+                  disableElevation
                   onClick={() => setOpenAccountDateModal(true)}
                   startIcon={<PrintOutlinedIcon sx={{ fontSize: '18px !important', color: '#0F172A' }} />}
                   sx={{
@@ -2744,6 +2823,27 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
               <Button
                 variant="contained"
                 disableElevation
+                onClick={handleShareParticularsListWhatsApp}
+                startIcon={<WhatsAppIcon sx={{ fontSize: '18px !important', color: '#FFFFFF' }} />}
+                sx={{
+                  backgroundColor: '#25D366',
+                  color: '#FFFFFF',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  px: 2,
+                  py: 0.6,
+                  borderRadius: '6px',
+                  '&:hover': {
+                    backgroundColor: '#1EBE5D',
+                  },
+                }}
+              >
+                Share on WhatsApp
+              </Button>
+              <Button
+                variant="contained"
+                disableElevation
                 onClick={() => setOpenParticularDateModal(true)}
                 startIcon={<PrintOutlinedIcon sx={{ fontSize: '18px !important', color: '#0F172A' }} />}
                 sx={{
@@ -2870,6 +2970,24 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                         </TableCell>
                         <TableCell align="center" sx={{ py: 1.4, px: 1.5, borderBottom: isLast ? 'none' : '1px solid #EEF2F6' }}>
                           <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 0.6 }}>
+                            <Tooltip title="Share on WhatsApp" arrow>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleShareBillWhatsApp(row)}
+                                sx={{
+                                  backgroundColor: '#25D366',
+                                  color: '#FFFFFF',
+                                  borderRadius: '4px',
+                                  width: '24px',
+                                  height: '22px',
+                                  p: 0,
+                                  '&:hover': { backgroundColor: '#1EBE5D' },
+                                }}
+                              >
+                                <WhatsAppIcon sx={{ fontSize: 14 }} />
+                              </IconButton>
+                            </Tooltip>
+
                             <Tooltip title="View" arrow>
                               <IconButton
                                 size="small"

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -7,11 +7,14 @@ import {
   Box,
   Typography,
   IconButton,
+  CircularProgress,
 } from '@mui/material';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import PrintOutlinedIcon from '@mui/icons-material/PrintOutlined';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { BillPrintTemplate, type BillPrintData } from './BillPrintTemplate';
 import { printBillDirectly } from '../utils/printUtils';
+import { shareBillOnWhatsApp } from '../utils/whatsappUtils';
 
 interface BillPrintModalProps {
   open: boolean;
@@ -20,10 +23,23 @@ interface BillPrintModalProps {
 }
 
 export const BillPrintModal: React.FC<BillPrintModalProps> = ({ open, onClose, bill }) => {
+  const [sharing, setSharing] = useState(false);
+
   if (!bill) return null;
 
   const handleTriggerPrint = () => {
     printBillDirectly(bill);
+  };
+
+  const handleShareWhatsApp = async () => {
+    try {
+      setSharing(true);
+      await shareBillOnWhatsApp(bill);
+    } catch (err) {
+      console.error('Failed to share bill on WhatsApp:', err);
+    } finally {
+      setSharing(false);
+    }
   };
 
   return (
@@ -100,6 +116,34 @@ export const BillPrintModal: React.FC<BillPrintModalProps> = ({ open, onClose, b
             <Button
               variant="contained"
               disableElevation
+              disabled={sharing}
+              onClick={handleShareWhatsApp}
+              startIcon={
+                sharing ? (
+                  <CircularProgress size={16} sx={{ color: '#FFFFFF' }} />
+                ) : (
+                  <WhatsAppIcon sx={{ fontSize: '18px !important', color: '#FFFFFF' }} />
+                )
+              }
+              sx={{
+                backgroundColor: '#25D366',
+                color: '#FFFFFF',
+                fontSize: '13px',
+                fontWeight: 700,
+                textTransform: 'none',
+                px: 2,
+                py: 0.6,
+                borderRadius: '6px',
+                '&:hover': {
+                  backgroundColor: '#1EBE5D',
+                },
+              }}
+            >
+              {sharing ? 'Sharing...' : 'Share on WhatsApp'}
+            </Button>
+            <Button
+              variant="contained"
+              disableElevation
               onClick={handleTriggerPrint}
               startIcon={<PrintOutlinedIcon sx={{ fontSize: '18px !important', color: '#0F172A' }} />}
               sx={{
@@ -172,27 +216,57 @@ export const BillPrintModal: React.FC<BillPrintModalProps> = ({ open, onClose, b
             Close
           </Button>
 
-          <Button
-            variant="contained"
-            disableElevation
-            onClick={handleTriggerPrint}
-            startIcon={<PrintOutlinedIcon sx={{ fontSize: '18px !important' }} />}
-            sx={{
-              backgroundColor: '#0B4DB7',
-              color: '#FFFFFF',
-              fontSize: '13px',
-              fontWeight: 700,
-              textTransform: 'none',
-              px: 3,
-              py: 0.8,
-              borderRadius: '6px',
-              '&:hover': {
-                backgroundColor: '#083B8D',
-              },
-            }}
-          >
-            Print
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1.5 }}>
+            <Button
+              variant="contained"
+              disableElevation
+              disabled={sharing}
+              onClick={handleShareWhatsApp}
+              startIcon={
+                sharing ? (
+                  <CircularProgress size={16} sx={{ color: '#FFFFFF' }} />
+                ) : (
+                  <WhatsAppIcon sx={{ fontSize: '18px !important' }} />
+                )
+              }
+              sx={{
+                backgroundColor: '#25D366',
+                color: '#FFFFFF',
+                fontSize: '13px',
+                fontWeight: 700,
+                textTransform: 'none',
+                px: 2.5,
+                py: 0.8,
+                borderRadius: '6px',
+                '&:hover': {
+                  backgroundColor: '#1EBE5D',
+                },
+              }}
+            >
+              {sharing ? 'Sharing...' : 'Share on WhatsApp'}
+            </Button>
+            <Button
+              variant="contained"
+              disableElevation
+              onClick={handleTriggerPrint}
+              startIcon={<PrintOutlinedIcon sx={{ fontSize: '18px !important' }} />}
+              sx={{
+                backgroundColor: '#0B4DB7',
+                color: '#FFFFFF',
+                fontSize: '13px',
+                fontWeight: 700,
+                textTransform: 'none',
+                px: 3,
+                py: 0.8,
+                borderRadius: '6px',
+                '&:hover': {
+                  backgroundColor: '#083B8D',
+                },
+              }}
+            >
+              Print
+            </Button>
+          </Box>
         </DialogActions>
       </Dialog>
     </>

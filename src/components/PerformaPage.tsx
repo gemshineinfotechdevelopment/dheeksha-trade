@@ -46,9 +46,11 @@ import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import BusinessRoundedIcon from '@mui/icons-material/BusinessRounded';
 import ListAltRoundedIcon from '@mui/icons-material/ListAltRounded';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { CustomersApi, ProductsApi, CompaniesApi, PerformasApi } from '../services/api';
 import { PerformaPrintModal } from './PerformaPrintModal';
 import type { PerformaPrintData } from './PerformaPrintTemplate';
+import { sharePerformaOnWhatsApp } from '../utils/whatsappUtils';
 
 export type PerformaSubTab = 'Create Performa' | 'Customer Performa List';
 
@@ -1652,6 +1654,20 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                           </TableCell>
                           <TableCell sx={{ textAlign: 'center' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                              <Tooltip title="Share on WhatsApp">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => sharePerformaOnWhatsApp(p)}
+                                  sx={{
+                                    color: '#FFFFFF',
+                                    backgroundColor: '#25D366',
+                                    '&:hover': { backgroundColor: '#1EBE5D' },
+                                  }}
+                                >
+                                  <WhatsAppIcon sx={{ fontSize: 18 }} />
+                                </IconButton>
+                              </Tooltip>
+
                               <Tooltip title="Print Performa">
                                 <IconButton
                                   size="small"
@@ -1908,18 +1924,37 @@ export const PerformaPage: FC<PerformaPageProps> = ({
             Close
           </Button>
           {selectedPerformaForView && (
-            <Button
-              variant="contained"
-              disableElevation
-              onClick={() => {
-                setViewModalOpen(false);
-                handleOpenPrintModal(selectedPerformaForView);
-              }}
-              startIcon={<PrintOutlinedIcon sx={{ fontSize: 18 }} />}
-              sx={{ backgroundColor: '#0B4DB7', textTransform: 'none', fontWeight: 700 }}
-            >
-              Print Performa
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="contained"
+                disableElevation
+                onClick={() => {
+                  sharePerformaOnWhatsApp(selectedPerformaForView);
+                }}
+                startIcon={<WhatsAppIcon sx={{ fontSize: 18 }} />}
+                sx={{
+                  backgroundColor: '#25D366',
+                  color: '#FFFFFF',
+                  textTransform: 'none',
+                  fontWeight: 700,
+                  '&:hover': { backgroundColor: '#1EBE5D' },
+                }}
+              >
+                Share on WhatsApp
+              </Button>
+              <Button
+                variant="contained"
+                disableElevation
+                onClick={() => {
+                  setViewModalOpen(false);
+                  handleOpenPrintModal(selectedPerformaForView);
+                }}
+                startIcon={<PrintOutlinedIcon sx={{ fontSize: 18 }} />}
+                sx={{ backgroundColor: '#0B4DB7', textTransform: 'none', fontWeight: 700 }}
+              >
+                Print Performa
+              </Button>
+            </Box>
           )}
         </DialogActions>
       </Dialog>

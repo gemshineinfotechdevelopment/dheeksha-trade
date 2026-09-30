@@ -35,8 +35,10 @@ import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import SavingsRoundedIcon from '@mui/icons-material/SavingsRounded';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PrintOutlinedIcon from '@mui/icons-material/PrintOutlined';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { CustomersApi, AccountsApi, CompaniesApi } from '../services/api';
 import { printCustomerListDirectly } from '../utils/printUtils';
+import { shareLedgerOnWhatsApp } from '../utils/whatsappUtils';
 import { DateRangePrintModal } from './DateRangePrintModal';
 
 export interface CustomerFinancial {
@@ -274,6 +276,16 @@ export const AllCustomersPage: FC<AllCustomersPageProps> = ({
       alert('Error recording payment');
     } finally {
       setPaymentLoading(false);
+    }
+  };
+
+  // Share Customer Statement on WhatsApp
+  const handleShareCustomerWhatsApp = async (customer: CustomerFinancial) => {
+    try {
+      const ledgerData = await AccountsApi.getAll(customer.name);
+      await shareLedgerOnWhatsApp(customer.name, ledgerData || [], undefined, undefined, customer.mobile);
+    } catch (err) {
+      console.error('Failed to share customer statement on WhatsApp:', err);
     }
   };
 
@@ -1194,6 +1206,28 @@ export const AllCustomersPage: FC<AllCustomersPageProps> = ({
                             >
                               Statement
                             </Button>
+                          </Tooltip>
+
+                          {/* WhatsApp Share Statement Button */}
+                          <Tooltip title="Share Statement on WhatsApp" arrow>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleShareCustomerWhatsApp(customer)}
+                              sx={{
+                                color: '#FFFFFF',
+                                backgroundColor: '#25D366',
+                                border: '1px solid #22C55E',
+                                borderRadius: '6px',
+                                p: 0.7,
+                                transition: 'all 0.15s ease',
+                                '&:hover': {
+                                  backgroundColor: '#1EBE5D',
+                                  borderColor: '#1EBE5D',
+                                },
+                              }}
+                            >
+                              <WhatsAppIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
                           </Tooltip>
 
                           {/* Quick Payment / Advance Button */}
