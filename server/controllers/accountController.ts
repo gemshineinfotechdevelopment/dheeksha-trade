@@ -27,7 +27,7 @@ export const addCredit = async (req: Request, res: Response, next: NextFunction)
     const result = await addCustomerCreditToMasterPerforma({
       customerId,
       customerName: customerName || 'General',
-      companyName: companyName || 'General',
+      companyName: companyName ? String(companyName).trim() : '',
       creditAmount,
       date,
       paymentMode: paymentMode || 'Bank',
@@ -67,11 +67,14 @@ export const deleteAccountEntry = async (req: Request, res: Response, next: Next
     } else if (entry.billNo && entry.billNo.trim() !== '' && entry.type === 'BILL') {
       await Particular.findOneAndDelete({ billNo: entry.billNo.trim() });
     } else if (entry.type === 'BILL') {
-      await Particular.findOneAndDelete({
+      const matchCond: any = {
         customerName: { $regex: new RegExp(`^${escapeRegex(entry.customerName.trim())}$`, 'i') },
-        companyName: { $regex: new RegExp(`^${escapeRegex(entry.companyName.trim())}$`, 'i') },
         date: entry.date,
-      });
+      };
+      if (entry.companyName && entry.companyName.trim() !== '') {
+        matchCond.companyName = { $regex: new RegExp(`^${escapeRegex(entry.companyName.trim())}$`, 'i') };
+      }
+      await Particular.findOneAndDelete(matchCond);
     }
 
     // If deleting a CREDIT or ADVANCE entry, adjust master performa advance if linked

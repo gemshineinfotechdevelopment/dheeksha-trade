@@ -283,7 +283,6 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
         if (compRes && compRes.length > 0) {
           const mapped = compRes.map((c: any) => ({ id: c._id || c.id, name: c.name }));
           setCompanyOptions(mapped);
-          if (!addCreditCompanyName) setAddCreditCompanyName(mapped[0].name);
         }
 
         if (prodRes && prodRes.length > 0) {
@@ -493,7 +492,7 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
       const created = await ParticularsApi.create({
         customerName: currentCustomerName || 'General',
         caseCount: caseCount || '0',
-        companyName: company || (companyOptions[0]?.name ?? 'General'),
+        companyName: company ? company.trim() : '',
         discount: discount || '0',
         transport: transport || '-',
         packing: packing || '0',
@@ -509,7 +508,7 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
       const createdBillData: BillPrintData = {
         billNo: assignedBillNo,
         customerName: currentCustomerName || 'General',
-        companyName: company || (companyOptions[0]?.name ?? 'General'),
+        companyName: company ? company.trim() : '',
         preparedBy: 'S.Nagaraj',
         phone: '+91 98765 43210',
         email: 'info@dheekshatrade.com',
@@ -531,7 +530,7 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
         total: finalTotalAmount,
       };
 
-      let successMsg = `Particular bill #${assignedBillNo} for ${company || 'General'} created successfully!`;
+      let successMsg = `Particular bill #${assignedBillNo}${company && company.trim() ? ` for ${company.trim()}` : ''} created successfully!`;
       if (created?.performaConsumption?.consumed) {
         successMsg += `\n\n✓ Performa Allocation Applied:\n- Consumed ${created.performaConsumption.totalCasesConsumed} cases (₹${created.performaConsumption.totalAmountConsumed?.toLocaleString('en-IN')})\n- Remaining Customer Advance: ₹${created.performaConsumption.remainingCustomerAdvance?.toLocaleString('en-IN')}`;
       }
@@ -581,7 +580,7 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
       setCreditLoading(true);
       const res = await AccountsApi.addCredit({
         customerName: targetCust,
-        companyName: addCreditCompanyName || (companyOptions[0]?.name ?? 'General'),
+        companyName: addCreditCompanyName ? addCreditCompanyName.trim() : '',
         creditAmount: creditAmount.trim(),
         date: creditDate,
         paymentMode: 'Bank',
@@ -2276,7 +2275,7 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                             {row.customerName}
                           </TableCell>
                           <TableCell sx={{ py: 1.6, px: { xs: 2, sm: 2.5 }, fontSize: '13.5px', fontWeight: 600, color: '#0F172A', borderBottom: isLast ? 'none' : '1px solid #EEF2F6' }}>
-                            {row.companyName}
+                            {row.companyName && row.companyName !== 'General' ? row.companyName : '-'}
                           </TableCell>
                           <TableCell align="right" sx={{ py: 1.6, px: { xs: 1.5, sm: 2.5 }, fontSize: '13.5px', fontWeight: 500, color: '#DC2626', borderBottom: isLast ? 'none' : '1px solid #EEF2F6' }}>
                             {row.debit}
@@ -2522,7 +2521,7 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                           {row.customerName}
                         </TableCell>
                         <TableCell align="center" sx={{ py: 1.4, px: 1.5, fontSize: '13px', fontWeight: 600, color: '#0F172A', borderBottom: isLast ? 'none' : '1px solid #EEF2F6', borderRight: '1px solid #EEF2F6' }}>
-                          {row.companyName}
+                          {row.companyName && row.companyName !== 'General' ? row.companyName : '-'}
                         </TableCell>
                         <TableCell align="center" sx={{ py: 1.4, px: 1.5, fontSize: '12.5px', fontWeight: 500, color: '#475569', borderBottom: isLast ? 'none' : '1px solid #EEF2F6', borderRight: '1px solid #EEF2F6' }}>
                           {row.date}
@@ -3380,7 +3379,7 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
 
             <Box>
               <Typography sx={{ fontSize: '12.5px', fontWeight: 600, color: '#475569', mb: 0.5 }}>
-                Company Name *
+                Company Name
               </Typography>
               <Autocomplete
                 freeSolo

@@ -311,7 +311,7 @@ export const PerformaPage: FC<PerformaPageProps> = ({
       productId: selectedProductObj?._id,
       productCode: productCode.trim() || `SKU-${Date.now().toString().slice(-4)}`,
       productName: trimmedName,
-      companyName: productCompany.trim() || selectedCompany || companies[0]?.name || 'General',
+      companyName: productCompany.trim() || selectedCompany || '',
       category: selectedProductObj?.category || 'Trading',
       requiredCases: String(casesVal),
       rate: String(rateVal),
@@ -420,7 +420,7 @@ export const PerformaPage: FC<PerformaPageProps> = ({
         customerSnapshot: {
           name: selectedCustomer.name,
           phone: selectedCustomer.mobile || selectedCustomer.phone || '',
-          companyName: selectedCompany || selectedCustomer.companyName || companies[0]?.name || '',
+          companyName: selectedCompany || selectedCustomer.companyName || '',
           address: selectedCustomer.address || '',
           gst: selectedCustomer.gst || '',
         },
@@ -432,7 +432,7 @@ export const PerformaPage: FC<PerformaPageProps> = ({
           productSnapshot: {
             productCode: r.productCode,
             productName: r.productName,
-            companyName: r.companyName || selectedCompany || 'General',
+            companyName: r.companyName || selectedCompany || '',
             category: r.category,
           },
           requiredCases: parseFloat(r.requiredCases) || 0,

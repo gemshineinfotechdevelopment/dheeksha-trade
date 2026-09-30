@@ -85,7 +85,7 @@ export const addCustomerCreditToMasterPerforma = async (params: {
   const {
     customerId,
     customerName,
-    companyName = 'General',
+    companyName = '',
     creditAmount,
     date = new Date().toISOString().split('T')[0],
     paymentMode = 'Bank',

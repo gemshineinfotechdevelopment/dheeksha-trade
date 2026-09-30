@@ -7,7 +7,7 @@ export interface IAccountLedger extends Document {
   performaNumber?: string;
   customerName: string;
   date: string;
-  companyName: string;
+  companyName?: string;
   debit: string;
   credit: string;
   balance: string;
@@ -27,7 +27,7 @@ const AccountLedgerSchema: Schema = new Schema(
     performaNumber: { type: String, trim: true },
     customerName: { type: String, required: true, trim: true },
     date: { type: String, required: true },
-    companyName: { type: String, required: true, trim: true },
+    companyName: { type: String, default: '', trim: true },
     debit: { type: String, default: '0.00' },
     credit: { type: String, default: '0.00' },
     balance: { type: String, default: '0.00' },

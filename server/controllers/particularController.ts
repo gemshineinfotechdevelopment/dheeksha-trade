@@ -89,7 +89,7 @@ export const createParticular = async (req: Request, res: Response, next: NextFu
     const particular = await Particular.create({
       customerName: customerName || 'General',
       caseCount: caseCount || '0',
-      companyName: companyName || 'General',
+      companyName: companyName ? String(companyName).trim() : '',
       discount: discount || '0',
       transport: transport || '-',
       packing: packing || '0',
@@ -279,12 +279,15 @@ export const deleteParticular = async (req: Request, res: Response, next: NextFu
       orConditions.push({ billNo: String(particular.billNo).trim() });
     }
     if (particular.customerName && particular.date) {
-      orConditions.push({
+      const matchCond: any = {
         customerName: { $regex: new RegExp(`^${escapeRegex(particular.customerName.trim())}$`, 'i') },
-        companyName: { $regex: new RegExp(`^${escapeRegex(particular.companyName.trim())}$`, 'i') },
         date: particular.date,
         type: 'BILL',
-      });
+      };
+      if (particular.companyName && particular.companyName.trim() !== '') {
+        matchCond.companyName = { $regex: new RegExp(`^${escapeRegex(particular.companyName.trim())}$`, 'i') };
+      }
+      orConditions.push(matchCond);
     }
 
     await AccountLedger.deleteMany({ $or: orConditions });
