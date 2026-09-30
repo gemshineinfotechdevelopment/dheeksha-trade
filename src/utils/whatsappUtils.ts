@@ -22,37 +22,79 @@ export const normalizeWhatsAppPhone = (phone?: string): string => {
  * Generates an in-memory PDF Blob from raw HTML using html2pdf.js without saving to disk
  */
 export const generatePdfBlobFromHtml = async (html: string, fileName: string): Promise<File | null> => {
-  try {
-    const container = document.createElement('div');
-    container.style.position = 'fixed';
-    container.style.left = '-9999px';
-    container.style.top = '0';
-    container.style.width = '800px';
-    container.style.backgroundColor = '#FFFFFF';
-    container.innerHTML = html;
-    document.body.appendChild(container);
+  return new Promise((resolve) => {
+    try {
+      const cleanFileName = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.top = '0';
+      iframe.style.left = '0';
+      iframe.style.width = '794px';
+      iframe.style.height = '1123px';
+      iframe.style.zIndex = '-99999';
+      iframe.style.opacity = '1';
+      iframe.style.visibility = 'visible';
+      iframe.style.border = 'none';
+      iframe.style.pointerEvents = 'none';
+      document.body.appendChild(iframe);
 
-    const opt = {
-      margin: [8, 8, 8, 8],
-      filename: fileName,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    };
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+        resolve(null);
+        return;
+      }
 
-    const pdfBlob: Blob = await (html2pdf() as any)
-      .from(container)
-      .set(opt)
-      .output('blob');
+      doc.open();
+      doc.write(html);
+      doc.close();
 
-    document.body.removeChild(container);
+      // Allow 350ms for the browser layout engine to render tables, inline CSS, and fonts
+      setTimeout(async () => {
+        try {
+          const target = doc.body;
+          const opt = {
+            margin: [8, 8, 8, 8],
+            filename: cleanFileName,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: {
+              scale: 2,
+              useCORS: true,
+              logging: false,
+              backgroundColor: '#FFFFFF',
+              windowWidth: 794,
+              scrollX: 0,
+              scrollY: 0,
+            },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          };
 
-    const cleanFileName = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
-    return new File([pdfBlob], cleanFileName, { type: 'application/pdf' });
-  } catch (error) {
-    console.warn('[PDF Gen Error] Falling back to text-only WhatsApp message:', error);
-    return null;
-  }
+          const worker = (html2pdf() as any).set(opt).from(target);
+          const pdfBlob: Blob = await worker.output('blob');
+
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+
+          if (pdfBlob && pdfBlob.size > 200) {
+            resolve(new File([pdfBlob], cleanFileName, { type: 'application/pdf' }));
+          } else {
+            console.warn('[PDF Gen] Generated PDF Blob is too small or empty');
+            resolve(null);
+          }
+        } catch (err) {
+          console.error('[PDF Generation Worker Error]:', err);
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+          resolve(null);
+        }
+      }, 350);
+    } catch (e) {
+      console.error('[PDF Gen Error]:', e);
+      resolve(null);
+    }
+  });
 };
 
 /**
