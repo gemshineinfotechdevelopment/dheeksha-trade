@@ -31,6 +31,13 @@ export interface PerformaPrintData {
   totalRequiredCases: number;
   totalUsedCases?: number;
   totalRemainingCases?: number;
+  subtotal?: number;
+  discount?: string | number;
+  discountAmount?: number;
+  packing?: string | number;
+  packingAmount?: number;
+  tax?: string | number;
+  taxAmount?: number;
   totalAllocatedAmount: number;
   totalUsedAmount?: number;
   totalRemainingAmount?: number;
@@ -51,6 +58,61 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
     const num = val || 0;
     return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
+
+  const rawSubtotal = (performa.products || []).reduce(
+    (acc, p: any) =>
+      acc +
+      (p.allocatedAmount !== undefined && Number(p.allocatedAmount) > 0
+        ? Number(p.allocatedAmount)
+        : (Number(p.requiredCases) || 0) * (Number(p.rate) || 0) * (Number(p.pktPerUnit || p.pktUnit) || 1)),
+    0
+  );
+  const subtotalVal = performa.subtotal !== undefined && performa.subtotal > 0 ? performa.subtotal : rawSubtotal;
+
+  // Discount calculation
+  const rawDisc = String(performa.discount ?? '').trim();
+  const cleanDisc = rawDisc.replace(/[^0-9.]/g, '');
+  const discNum = parseFloat(cleanDisc) || 0;
+  let discountAmt = 0;
+  if (performa.discountAmount !== undefined && Number(performa.discountAmount) > 0) {
+    discountAmt = Number(performa.discountAmount);
+  } else if (discNum > 0) {
+    if (rawDisc.includes('%') || discNum <= 100) {
+      discountAmt = (subtotalVal * discNum) / 100;
+    } else {
+      discountAmt = discNum;
+    }
+  }
+
+  const baseAfterDiscount = Math.max(0, subtotalVal - discountAmt);
+
+  // Packing calculation (% on discounted base amount or flat amount)
+  const rawPack = String(performa.packing ?? '').trim();
+  const cleanPack = rawPack.replace(/[^0-9.]/g, '');
+  const packNum = parseFloat(cleanPack) || 0;
+  let packingAmt = 0;
+  if (performa.packingAmount !== undefined && Number(performa.packingAmount) > 0) {
+    packingAmt = Number(performa.packingAmount);
+  } else if (packNum > 0) {
+    if (rawPack.includes('%') || packNum <= 100) {
+      packingAmt = (baseAfterDiscount * packNum) / 100;
+    } else {
+      packingAmt = packNum;
+    }
+  }
+
+  // Tax calculation (flat ₹ amount)
+  const rawTax = String(performa.tax ?? '').trim().replace(/[^0-9.]/g, '');
+  const taxNum = parseFloat(rawTax) || 0;
+  let taxAmt = 0;
+  if (performa.taxAmount !== undefined && Number(performa.taxAmount) > 0) {
+    taxAmt = Number(performa.taxAmount);
+  } else if (taxNum > 0) {
+    taxAmt = taxNum;
+  }
+
+  // Total Allocated Value = Subtotal - Discount + Packing + Tax
+  const totalAllocatedVal = Math.max(0, subtotalVal - discountAmt + packingAmt + taxAmt);
 
   return (
     <div
@@ -236,7 +298,7 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
                     )}
                   </td>
                   <td style={{ padding: '7px 8px', color: '#0B4DB7', fontWeight: 600, border: '1px solid #CBD5E1', fontSize: '11.5px' }}>
-                    {item.companyName || performa.companyName || '-'}
+                    {(item.companyName && item.companyName.trim()) || (item as any).productSnapshot?.companyName || performa.companyName || '-'}
                   </td>
                   <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: 800, color: '#0F172A', border: '1px solid #CBD5E1' }}>
                     {item.requiredCases}
@@ -278,14 +340,36 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
           </div>
         </div>
 
-        <div style={{ width: '44%', fontSize: '12.5px', border: '1px solid #CBD5E1', borderRadius: '6px', backgroundColor: '#F8FAFC', padding: '10px 14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+        <div style={{ width: '44%', fontSize: '12px', border: '1px solid #CBD5E1', borderRadius: '6px', backgroundColor: '#F8FAFC', padding: '10px 14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
             <span style={{ color: '#475569' }}>Total Required Cases:</span>
             <strong style={{ color: '#0F172A' }}>{performa.totalRequiredCases}</strong>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-            <span style={{ color: '#475569' }}>Total Allocated Value:</span>
-            <strong style={{ color: '#0F172A' }}>₹ {formatCurrency(performa.totalAllocatedAmount)}</strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+            <span style={{ color: '#475569' }}>Subtotal:</span>
+            <strong style={{ color: '#0F172A' }}>₹ {formatCurrency(subtotalVal)}</strong>
+          </div>
+          {discountAmt > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#DC2626' }}>
+              <span>Discount {performa.discount ? `(${performa.discount}${String(performa.discount).includes('%') ? '' : '%'})` : ''}:</span>
+              <strong style={{ fontWeight: 700 }}>- ₹ {formatCurrency(discountAmt)}</strong>
+            </div>
+          )}
+          {packingAmt > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#475569' }}>
+              <span>Packing {performa.packing ? `(${performa.packing}${String(performa.packing).includes('%') ? '' : '%'})` : ''}:</span>
+              <strong style={{ fontWeight: 700, color: '#0F172A' }}>+ ₹ {formatCurrency(packingAmt)}</strong>
+            </div>
+          )}
+          {taxAmt > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#475569' }}>
+              <span>Tax (Amount):</span>
+              <strong style={{ fontWeight: 700, color: '#0F172A' }}>+ ₹ {formatCurrency(taxAmt)}</strong>
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', paddingTop: '4px', borderTop: '1px dashed #CBD5E1' }}>
+            <span style={{ color: '#0F172A', fontWeight: 700 }}>Total Value:</span>
+            <strong style={{ color: '#0B4DB7', fontWeight: 800, fontSize: '13.5px' }}>₹ {formatCurrency(totalAllocatedVal)}</strong>
           </div>
           <div style={{ height: '1px', backgroundColor: '#CBD5E1', margin: '6px 0' }} />
           <div
@@ -319,7 +403,7 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
               paddingTop: '6px',
               borderTop: '2px solid #0B4DB7',
               marginTop: '4px',
-              fontSize: '13.5px',
+              fontSize: '13px',
               color: '#166534',
             }}
           >

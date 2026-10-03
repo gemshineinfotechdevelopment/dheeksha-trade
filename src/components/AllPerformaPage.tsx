@@ -117,6 +117,9 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
   const [editAdvanceAmount, setEditAdvanceAmount] = useState<string>('0');
   const [editStatus, setEditStatus] = useState<string>('ACTIVE');
   const [editNotes, setEditNotes] = useState<string>('');
+  const [editDiscount, setEditDiscount] = useState<string>('');
+  const [editPacking, setEditPacking] = useState<string>('');
+  const [editTax, setEditTax] = useState<string>('');
   const [editProducts, setEditProducts] = useState<EditProductItem[]>([]);
 
   // Edit Modal - Add Row sub-form
@@ -244,6 +247,13 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
       totalRequiredCases: performa.totalRequiredCases,
       totalUsedCases: performa.totalUsedCases,
       totalRemainingCases: performa.totalRemainingCases,
+      subtotal: performa.subtotal,
+      discount: performa.discount,
+      discountAmount: performa.discountAmount,
+      packing: performa.packing,
+      packingAmount: performa.packingAmount,
+      tax: performa.tax,
+      taxAmount: performa.taxAmount,
       totalAllocatedAmount: performa.totalAllocatedAmount,
       totalUsedAmount: performa.totalUsedAmount,
       totalRemainingAmount: performa.totalRemainingAmount,
@@ -273,6 +283,9 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
       setEditAdvanceAmount(String(data.advanceAmount || 0));
       setEditStatus(data.status || 'ACTIVE');
       setEditNotes(data.notes || '');
+      setEditDiscount(data.discount !== undefined ? String(data.discount) : '');
+      setEditPacking(data.packing !== undefined ? String(data.packing) : '');
+      setEditTax(data.tax !== undefined ? String(data.tax) : '');
 
       const loadedProducts: EditProductItem[] = (data.products || []).map((p: any, idx: number) => ({
         id: p._id || String(idx) + '-' + Date.now(),
@@ -341,7 +354,7 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
       productId: newRowProductObj?._id,
       productCode: newRowProductCode.trim() || `SKU-${Date.now().toString().slice(-4)}`,
       productName: trimmed,
-      companyName: newRowProductCompany.trim() || editCompanyName || 'General',
+      companyName: newRowProductCompany.trim() || (editCompanyName && editCompanyName.toLowerCase() !== 'general' ? editCompanyName.trim() : '') || '',
       category: newRowProductObj?.category || 'Trading',
       requiredCases: casesVal,
       usedCases: 0,
@@ -357,7 +370,6 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
     setNewRowProductObj(null);
     setNewRowProductName('');
     setNewRowProductCode('');
-    setNewRowProductCompany('');
     setNewRowCases('');
     setNewRowRate('');
     setNewRowPktUnit('1');
@@ -368,9 +380,58 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
     return editProducts.reduce((sum, p) => sum + (parseFloat(String(p.requiredCases)) || 0), 0);
   }, [editProducts]);
 
-  const editTotalAllocated = useMemo(() => {
+  const editSubtotalAllocated = useMemo(() => {
     return editProducts.reduce((sum, p) => sum + (parseFloat(String(p.allocatedAmount)) || 0), 0);
   }, [editProducts]);
+
+  const editDiscountVal = useMemo(() => {
+    if (!editDiscount) return 0;
+    const cleanDisc = String(editDiscount).trim();
+    const num = parseFloat(cleanDisc) || 0;
+    if (num <= 0) return 0;
+    if (cleanDisc.endsWith('%') || num <= 100) {
+      return (editSubtotalAllocated * num) / 100;
+    }
+    return num;
+  }, [editDiscount, editSubtotalAllocated]);
+
+  const editBaseAfterDiscount = useMemo(() => {
+    return Math.max(0, editSubtotalAllocated - editDiscountVal);
+  }, [editSubtotalAllocated, editDiscountVal]);
+
+  const editPackingVal = useMemo(() => {
+    if (!editPacking) return 0;
+    const cleanPack = String(editPacking).trim();
+    const num = parseFloat(cleanPack) || 0;
+    if (num <= 0) return 0;
+    if (cleanPack.endsWith('%') || num <= 100) {
+      return (editBaseAfterDiscount * num) / 100;
+    }
+    return num;
+  }, [editPacking, editBaseAfterDiscount]);
+
+  const editTaxVal = useMemo(() => {
+    if (!editTax) return 0;
+    const cleanTax = String(editTax).trim().replace(/[^0-9.]/g, '');
+    const num = parseFloat(cleanTax) || 0;
+    if (num <= 0) return 0;
+    return num;
+  }, [editTax]);
+
+  const editFinalTotalAllocated = useMemo(() => {
+    const net = Math.max(0, editSubtotalAllocated - editDiscountVal + editPackingVal + editTaxVal);
+    return Number(net.toFixed(2));
+  }, [editSubtotalAllocated, editDiscountVal, editPackingVal, editTaxVal]);
+
+  // Filter available products in Edit Modal by chosen brand
+  const filteredEditModalProducts = useMemo(() => {
+    if (!newRowProductCompany || !newRowProductCompany.trim() || newRowProductCompany.trim().toLowerCase() === 'general') return availableProducts;
+    const comp = newRowProductCompany.trim().toLowerCase();
+    const matched = availableProducts.filter(
+      (p: any) => p.companyName && p.companyName.trim().toLowerCase() === comp
+    );
+    return matched.length > 0 ? matched : availableProducts;
+  }, [availableProducts, newRowProductCompany]);
 
   // Save Performa Changes
   const handleSaveEditPerforma = async () => {
@@ -382,12 +443,24 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
 
     try {
       setEditLoading(true);
+      const uniqueCompanies = Array.from(
+        new Set(
+          editProducts
+            .map((p) => p.companyName?.trim())
+            .filter((c): c is string => Boolean(c) && c.toLowerCase() !== 'general')
+        )
+      );
+      const combinedCompanyName =
+        uniqueCompanies.length > 0
+          ? uniqueCompanies.join(', ')
+          : (editCompanyName && editCompanyName.toLowerCase() !== 'general' ? editCompanyName.trim() : '');
+
       const payload = {
-        companyName: editCompanyName.trim(),
+        companyName: combinedCompanyName,
         customerSnapshot: {
           name: editCustomerName.trim(),
           phone: editCustomerPhone.trim(),
-          companyName: editCompanyName.trim(),
+          companyName: combinedCompanyName || editCustomerName.trim(),
           address: editCustomerAddress.trim(),
           gst: editCustomerGst.trim(),
         },
@@ -395,12 +468,15 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
         date: editDate,
         status: editStatus,
         notes: editNotes.trim(),
+        discount: editDiscount || '0',
+        packing: editPacking || '0',
+        tax: editTax || '0',
         products: editProducts.map((p) => ({
           productId: p.productId,
           productSnapshot: {
             productCode: p.productCode,
             productName: p.productName,
-            companyName: p.companyName || editCompanyName || '',
+            companyName: p.companyName || editCompanyName || 'General',
             category: p.category,
           },
           requiredCases: parseFloat(String(p.requiredCases)) || 0,
@@ -1061,18 +1137,42 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
 
                 <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: '8px' }}>
                   <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', mb: 0.5 }}>
-                    Advance & Status
+                    Performa Financial Breakdown
                   </Typography>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <span style={{ fontSize: '13px', color: '#475569' }}>Total Advance:</span>
-                    <strong style={{ color: '#0B4DB7' }}>₹{selectedPerformaForView.advanceAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.8, fontSize: '12px', mb: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#64748B' }}>Subtotal:</span>
+                      <strong>₹{(selectedPerformaForView.subtotal ?? (selectedPerformaForView.products || []).reduce((s: number, p: any) => s + (p.allocatedAmount || 0), 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#64748B' }}>Discount:</span>
+                      <strong style={{ color: selectedPerformaForView.discountAmount ? '#DC2626' : undefined }}>
+                        {selectedPerformaForView.discountAmount ? `- ₹${selectedPerformaForView.discountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (selectedPerformaForView.discount || '-')}
+                      </strong>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#64748B' }}>Packing Charge:</span>
+                      <strong style={{ color: selectedPerformaForView.packingAmount ? '#0B4DB7' : undefined }}>
+                        {selectedPerformaForView.packingAmount ? `+ ₹${selectedPerformaForView.packingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (selectedPerformaForView.packing ? `${selectedPerformaForView.packing}%` : '-')}
+                      </strong>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#64748B' }}>Tax Amount:</span>
+                      <strong style={{ color: selectedPerformaForView.taxAmount ? '#166534' : undefined }}>
+                        {selectedPerformaForView.taxAmount ? `+ ₹${selectedPerformaForView.taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (selectedPerformaForView.tax ? `₹${selectedPerformaForView.tax}` : '-')}
+                      </strong>
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, borderTop: '1px solid #EEF2F6', mb: 0.5 }}>
+                    <span style={{ fontSize: '12.5px', color: '#0B4DB7', fontWeight: 700 }}>Total Value:</span>
+                    <strong style={{ color: '#0B4DB7', fontSize: '13.5px' }}>₹{(selectedPerformaForView.totalAllocatedAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <span style={{ fontSize: '13px', color: '#475569' }}>Remaining Advance:</span>
-                    <strong style={{ color: '#166534' }}>₹{selectedPerformaForView.remainingAdvanceAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                    <span style={{ fontSize: '12.5px', color: '#475569' }}>Advance / Remaining:</span>
+                    <strong style={{ color: '#166534' }}>₹{selectedPerformaForView.advanceAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })} / ₹{selectedPerformaForView.remainingAdvanceAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                   </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
-                    <span style={{ fontSize: '13px', color: '#475569' }}>Current Status:</span>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
+                    <span style={{ fontSize: '12.5px', color: '#475569' }}>Current Status:</span>
                     {getStatusChip(selectedPerformaForView.status)}
                   </Box>
                 </Paper>
@@ -1343,17 +1443,65 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                     placeholder="Optional notes..."
                   />
                 </Box>
+
+                {/* Financial Adjustments in Edit Modal */}
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2, mt: 2, pt: 2, borderTop: '1px solid #EEF2F6' }}>
+                  <TextField
+                    label="Discount (% or ₹)"
+                    size="small"
+                    value={editDiscount}
+                    onChange={(e) => setEditDiscount(e.target.value)}
+                    placeholder="e.g. 5% or 500"
+                    helperText={editDiscountVal > 0 ? `- ₹${editDiscountVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : undefined}
+                    slotProps={{
+                      formHelperText: { sx: { color: '#DC2626', fontWeight: 700 } },
+                    }}
+                  />
+                  <TextField
+                    label="Packing Charge (%)"
+                    size="small"
+                    value={editPacking}
+                    onChange={(e) => setEditPacking(e.target.value)}
+                    placeholder="e.g. 2.5% or 3"
+                    helperText={editPackingVal > 0 ? `+ ₹${editPackingVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Supports decimal (%)'}
+                    slotProps={{
+                      formHelperText: { sx: { color: '#0B4DB7', fontWeight: 600 } },
+                    }}
+                  />
+                  <TextField
+                    label="Tax (₹ Amount)"
+                    size="small"
+                    type="number"
+                    value={editTax}
+                    onChange={(e) => setEditTax(e.target.value)}
+                    placeholder="e.g. 1000"
+                    helperText={editTaxVal > 0 ? `+ ₹${editTaxVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : undefined}
+                    slotProps={{
+                      formHelperText: { sx: { color: '#166534', fontWeight: 600 } },
+                    }}
+                  />
+                </Box>
               </Paper>
 
               {/* Product Requirements Table */}
               <Paper elevation={0} sx={{ p: 2.5, borderRadius: '8px', border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
                   <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
                     Allocated Products & Quantities
                   </Typography>
-                  <Box sx={{ display: 'flex', gap: 2 }}>
-                    <Chip label={`Total Cases: ${editTotalCases}`} sx={{ fontWeight: 800, backgroundColor: '#EFF6FF', color: '#0B4DB7' }} />
-                    <Chip label={`Total Value: ₹${editTotalAllocated.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sx={{ fontWeight: 800, backgroundColor: '#F0FDF4', color: '#166534' }} />
+                  <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                    <Chip label={`Cases: ${editTotalCases}`} sx={{ fontWeight: 800, backgroundColor: '#EFF6FF', color: '#0B4DB7' }} />
+                    <Chip label={`Subtotal: ₹${editSubtotalAllocated.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sx={{ fontWeight: 700, backgroundColor: '#F1F5F9', color: '#475569' }} />
+                    {editDiscountVal > 0 && (
+                      <Chip label={`Discount: -₹${editDiscountVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sx={{ fontWeight: 700, backgroundColor: '#FEF2F2', color: '#DC2626' }} />
+                    )}
+                    {editPackingVal > 0 && (
+                      <Chip label={`Packing: +₹${editPackingVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sx={{ fontWeight: 700, backgroundColor: '#EFF6FF', color: '#0B4DB7' }} />
+                    )}
+                    {editTaxVal > 0 && (
+                      <Chip label={`Tax: +₹${editTaxVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sx={{ fontWeight: 700, backgroundColor: '#F0FDF4', color: '#166534' }} />
+                    )}
+                    <Chip label={`Net Total: ₹${editFinalTotalAllocated.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sx={{ fontWeight: 900, backgroundColor: '#DBEAFE', color: '#1E40AF' }} />
                   </Box>
                 </Box>
 
@@ -1372,8 +1520,11 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                   }}
                 >
                   <Autocomplete
-                    options={availableProducts}
-                    getOptionLabel={(o) => `${o.name || ''} - ${o.code || o.idCode || ''}`}
+                    options={filteredEditModalProducts}
+                    getOptionLabel={(o) => {
+                      if (typeof o === 'string') return o;
+                      return `${o.name || ''} ${o.code ? `(${o.code})` : ''} ${o.companyName ? `• ${o.companyName}` : ''}`.trim();
+                    }}
                     value={newRowProductObj}
                     onChange={(_e, val) => {
                       setNewRowProductObj(val);

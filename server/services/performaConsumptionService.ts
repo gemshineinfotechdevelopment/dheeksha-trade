@@ -209,7 +209,14 @@ export const consumeBillAgainstPerforma = async (
       return result;
     }
 
-    // Process each bill item against Master Performa
+    // Calculate total product subtotal vs final bill net total (inclusive of Tax, Packing, Discount)
+    const totalBillSubtotal = products.reduce(
+      (acc, p) => acc + (parseFloat(String(p.amount || '0').replace(/,/g, '')) || 0),
+      0
+    );
+    const billNetTotal = parseFloat(String(billTotal || '0').replace(/,/g, '')) || totalBillSubtotal;
+    const scaleRatio = totalBillSubtotal > 0 && billNetTotal > 0 ? billNetTotal / totalBillSubtotal : 1;
+
     let totalBillAmountConsumed = 0;
 
     for (const billItem of products) {
@@ -236,13 +243,14 @@ export const consumeBillAgainstPerforma = async (
           const casesToConsume = Math.min(remainingCasesToConsume, availableCases);
           if (casesToConsume <= 0) continue;
 
-          // Consume actual bill item amount proportionally
-          let consumedAmount = 0;
+          // Consume bill item amount proportionally scaled by Net Total (including Tax & Packing)
+          let rawItemConsumed = 0;
           if (billedCases > 0 && itemAmount > 0) {
-            consumedAmount = Number(((casesToConsume / billedCases) * itemAmount).toFixed(2));
+            rawItemConsumed = (casesToConsume / billedCases) * itemAmount;
           } else {
-            consumedAmount = Number((casesToConsume * itemRate).toFixed(2));
+            rawItemConsumed = casesToConsume * itemRate;
           }
+          const consumedAmount = Number((rawItemConsumed * scaleRatio).toFixed(2));
 
           pProd.usedCases = Number((pProd.usedCases + casesToConsume).toFixed(2));
           pProd.caseOut = Number((pProd.caseOut + casesToConsume).toFixed(2));
@@ -252,7 +260,7 @@ export const consumeBillAgainstPerforma = async (
 
           totalBillAmountConsumed += consumedAmount;
 
-          // Record audit log for product case consumption
+          // Record audit log for product case consumption with net total share
           await PerformaAudit.create({
             customerId: customer?._id || masterPerforma.customerId,
             customerName: customerName.trim(),
@@ -267,7 +275,7 @@ export const consumeBillAgainstPerforma = async (
             type: 'PERFORMA_CONSUMED',
             date: billDate,
             reference: `Bill #${billNo}`,
-            notes: `Consumed ${casesToConsume} cases for bill #${billNo}`,
+            notes: `Consumed ${casesToConsume} cases (₹${consumedAmount.toFixed(2)}) for bill #${billNo}`,
             createdBy: 'System',
           });
 
@@ -289,9 +297,10 @@ export const consumeBillAgainstPerforma = async (
       }
     }
 
-    // If total billed products consumed money, reduce advance from Master Performa
-    // Use actual final bill amount consumed
-    const amountToDeduct = totalBillAmountConsumed > 0 ? totalBillAmountConsumed : (result.consumed ? billTotal : 0);
+    // Deduct the Particular Bill's Net Total (inclusive of Tax, Packing, and Discount) from customer advance
+    const amountToDeduct = result.consumed
+      ? (billNetTotal > 0 ? billNetTotal : totalBillAmountConsumed)
+      : 0;
 
     masterPerforma.totalUsedCases = Number(
       masterPerforma.products.reduce((acc, curr) => acc + curr.usedCases, 0).toFixed(2)
@@ -305,9 +314,7 @@ export const consumeBillAgainstPerforma = async (
       0,
       Number((masterPerforma.advanceAmount - masterPerforma.advanceUsedAmount).toFixed(2))
     );
-    masterPerforma.totalUsedAmount = Number(
-      masterPerforma.products.reduce((acc, curr) => acc + curr.usedAmount, 0).toFixed(2)
-    );
+    masterPerforma.totalUsedAmount = Number((masterPerforma.totalUsedAmount + amountToDeduct).toFixed(2));
     masterPerforma.totalRemainingAmount = Math.max(
       0,
       Number((masterPerforma.totalAllocatedAmount - masterPerforma.totalUsedAmount).toFixed(2))

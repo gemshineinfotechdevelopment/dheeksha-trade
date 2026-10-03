@@ -89,7 +89,7 @@ export const BillPrintTemplate: React.FC<BillPrintTemplateProps> = ({ bill }) =>
   // Grand Total calculation
   const calculatedTotal = Math.max(0, subtotal - discountAmt + packingAmt + taxAmt);
   const rawTotalNum = parseFloat(String(bill.total ?? bill.amount ?? '0').replace(/,/g, '')) || 0;
-  const finalTotalNum = rawTotalNum > 0 ? rawTotalNum : calculatedTotal;
+  const finalTotalNum = rawTotalNum > 0 && Math.abs(rawTotalNum - calculatedTotal) < 0.05 ? rawTotalNum : calculatedTotal;
   const formattedTotal = finalTotalNum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const computedCases = bill.caseCount !== undefined && bill.caseCount !== ''

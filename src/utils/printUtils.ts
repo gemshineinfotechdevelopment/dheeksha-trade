@@ -75,14 +75,15 @@ export const generateBillHtml = (bill: BillPrintData): string => {
     }
   }
 
-  // Packing calculation (Calculated from reduced amount after discount)
+  const baseAfterDiscount = Math.max(0, subtotal - discountAmt);
+
+  // Packing calculation (Calculated from reduced amount after discount or flat)
   const rawPackStr = String(bill.packing ?? '').trim();
   const cleanPack = rawPackStr.replace(/[^0-9.]/g, '');
   const packNum = parseFloat(cleanPack) || 0;
   let packingAmt = 0;
   let packingLabel = 'Packing Charges';
   if (packNum > 0) {
-    const baseAfterDiscount = Math.max(0, subtotal - discountAmt);
     if (rawPackStr.includes('%') || packNum <= 100) {
       packingAmt = (baseAfterDiscount * packNum) / 100;
       packingLabel = `Packing (${bill.packing || packNum}${rawPackStr.includes('%') ? '' : '%'})`;
@@ -93,9 +94,8 @@ export const generateBillHtml = (bill: BillPrintData): string => {
   }
 
   // Tax calculation (Manual flat amount)
-  const rawTaxStr = String(bill.tax ?? '').trim();
-  const cleanTax = rawTaxStr.replace(/[^0-9.]/g, '');
-  const taxNum = parseFloat(cleanTax) || 0;
+  const rawTaxStr = String(bill.tax ?? '').trim().replace(/[^0-9.]/g, '');
+  const taxNum = parseFloat(rawTaxStr) || 0;
   let taxAmt = 0;
   let taxLabel = 'Tax Amount';
   if (taxNum > 0) {
@@ -106,7 +106,7 @@ export const generateBillHtml = (bill: BillPrintData): string => {
   // Grand Total calculation
   const calculatedTotal = Math.max(0, subtotal - discountAmt + packingAmt + taxAmt);
   const rawTotalNum = parseFloat(String(bill.total ?? bill.amount ?? '0').replace(/,/g, '')) || 0;
-  const finalTotalNum = rawTotalNum > 0 ? rawTotalNum : calculatedTotal;
+  const finalTotalNum = rawTotalNum > 0 && Math.abs(rawTotalNum - calculatedTotal) < 0.05 ? rawTotalNum : calculatedTotal;
   const formattedTotal = finalTotalNum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const computedCases = bill.caseCount !== undefined && bill.caseCount !== ''
@@ -940,26 +940,35 @@ export const printLedgerStatementDirectly = (customerName: string, ledgerEntries
 export const generateParticularsListPrintHtml = (particulars: any[], dateRangeText?: string): string => {
   const currentDate = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
   let totalSum = 0;
+  let totalSubtotalSum = 0;
   let totalCasesSum = 0;
 
   const rowsHtml = particulars.map((p, idx) => {
     const amt = parseFloat(String(p.total || p.amount || '0').replace(/,/g, '')) || 0;
+    const subAmt = parseFloat(String(p.amount || p.total || '0').replace(/,/g, '')) || amt;
     const cases = parseFloat(String(p.caseCount || '0')) || 0;
     totalSum += amt;
+    totalSubtotalSum += subAmt;
     totalCasesSum += cases;
-    const countItems = (p.products || []).length;
     const isEven = idx % 2 === 1;
+
+    const discStr = p.discount && String(p.discount).trim() !== '' && p.discount !== '0' ? String(p.discount) : '-';
+    const packStr = p.packing && String(p.packing).trim() !== '' && p.packing !== '0' ? String(p.packing) : '-';
+    const taxStr = p.tax && String(p.tax).trim() !== '' && p.tax !== '0' ? `₹${p.tax}` : '-';
 
     return `
       <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
-        <td class="text-center" style="width:35px; border: 1px solid #CBD5E1; padding: 6px 4px; color:#64748B;">${idx + 1}</td>
-        <td class="text-center" style="font-weight:800; color:#0B4DB7; width:75px; border: 1px solid #CBD5E1; padding: 6px 6px;">#${p.billNo || '-'}</td>
-        <td class="text-center" style="width:85px; border: 1px solid #CBD5E1; padding: 6px 6px; color:#334155;">${p.date || '-'}</td>
+        <td class="text-center" style="width:30px; border: 1px solid #CBD5E1; padding: 6px 4px; color:#64748B;">${idx + 1}</td>
+        <td class="text-center" style="font-weight:800; color:#0B4DB7; width:70px; border: 1px solid #CBD5E1; padding: 6px 4px;">#${p.billNo || '-'}</td>
+        <td class="text-center" style="width:75px; border: 1px solid #CBD5E1; padding: 6px 4px; color:#334155;">${p.date || '-'}</td>
         <td style="font-weight:700; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">${p.customerName || '-'}</td>
-        <td style="border: 1px solid #CBD5E1; padding: 6px 8px; color:#475569;">${p.companyName || '-'}</td>
-        <td class="text-center" style="width:60px; font-weight:700; border: 1px solid #CBD5E1; padding: 6px 6px;">${p.caseCount || '-'}</td>
-        <td class="text-center" style="width:75px; color:#64748B; border: 1px solid #CBD5E1; padding: 6px 6px;">${countItems} items</td>
-        <td class="text-right" style="font-weight:800; width:120px; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td style="border: 1px solid #CBD5E1; padding: 6px 6px; color:#475569; font-size:10.5px;">${p.companyName || '-'}</td>
+        <td class="text-center" style="width:50px; font-weight:700; border: 1px solid #CBD5E1; padding: 6px 4px;">${p.caseCount || '-'}</td>
+        <td class="text-right" style="width:90px; border: 1px solid #CBD5E1; padding: 6px 6px; color:#334155;">₹ ${subAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-center" style="width:65px; border: 1px solid #CBD5E1; padding: 6px 4px; color:${discStr !== '-' ? '#DC2626' : '#94A3B8'}; font-weight:600;">${discStr}</td>
+        <td class="text-center" style="width:65px; border: 1px solid #CBD5E1; padding: 6px 4px; color:${packStr !== '-' ? '#0F172A' : '#94A3B8'}; font-weight:600;">${packStr}</td>
+        <td class="text-center" style="width:65px; border: 1px solid #CBD5E1; padding: 6px 4px; color:${taxStr !== '-' ? '#0F172A' : '#94A3B8'}; font-weight:600;">${taxStr}</td>
+        <td class="text-right" style="font-weight:800; width:110px; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
       </tr>
     `;
   }).join('');
@@ -982,11 +991,11 @@ export const generateParticularsListPrintHtml = (particulars: any[], dateRangeTe
     .kpi-lbl { font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase; }
     .kpi-num { font-size: 15px; font-weight: 900; margin-top: 2px; color: #0F172A; }
     .table { width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #0F172A; }
-    .table th { background: #0F172A; color: #FFFFFF; border: 1px solid #0F172A; padding: 6px; font-weight: 800; font-size: 10.5px; text-transform: uppercase; }
+    .table th { background: #0F172A; color: #FFFFFF; border: 1px solid #0F172A; padding: 6px 4px; font-weight: 800; font-size: 10px; text-transform: uppercase; }
     .table td { border: 1px solid #CBD5E1; padding: 5px 6px; }
     .text-center { text-align: center; }
     .text-right { text-align: right; }
-    .totals td { background: #0F172A !important; color: #FFFFFF !important; border: 1px solid #0F172A !important; font-weight: 900; font-size: 11.5px; padding: 7px 6px; }
+    .totals td { background: #0F172A !important; color: #FFFFFF !important; border: 1px solid #0F172A !important; font-weight: 900; font-size: 11px; padding: 7px 6px; }
     .sig-section { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 24px; padding-top: 12px; border-top: 1px dashed #CBD5E1; font-size: 11px; page-break-inside: avoid; }
   </style>
 </head>
@@ -1023,24 +1032,28 @@ export const generateParticularsListPrintHtml = (particulars: any[], dateRangeTe
   <table class="table">
     <thead>
       <tr>
-        <th class="text-center" style="width:35px;">#</th>
-        <th class="text-center" style="width:75px;">Bill No</th>
-        <th class="text-center" style="width:85px;">Date</th>
+        <th class="text-center" style="width:30px;">#</th>
+        <th class="text-center" style="width:70px;">Bill No</th>
+        <th class="text-center" style="width:75px;">Date</th>
         <th>Customer Name</th>
         <th>Company</th>
-        <th class="text-center" style="width:60px;">Cases</th>
-        <th class="text-center" style="width:75px;">Products</th>
-        <th class="text-right" style="width:120px;">Total Amount</th>
+        <th class="text-center" style="width:50px;">Cases</th>
+        <th class="text-right" style="width:90px;">Subtotal (₹)</th>
+        <th class="text-center" style="width:65px;">Discount</th>
+        <th class="text-center" style="width:65px;">Packing</th>
+        <th class="text-center" style="width:65px;">Tax (₹)</th>
+        <th class="text-right" style="width:110px;">Net Total (₹)</th>
       </tr>
     </thead>
     <tbody>
-      ${rowsHtml || '<tr><td colspan="8" class="text-center" style="padding:18px; color:#64748B;">No bill records found for the selected period.</td></tr>'}
+      ${rowsHtml || '<tr><td colspan="11" class="text-center" style="padding:18px; color:#64748B;">No bill records found for the selected period.</td></tr>'}
     </tbody>
     <tfoot>
       <tr class="totals">
         <td colspan="5" class="text-right" style="padding-right:10px;">GRAND TOTAL (${particulars.length} Bills):</td>
         <td class="text-center">${totalCasesSum}</td>
-        <td></td>
+        <td class="text-right">₹ ${totalSubtotalSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td colspan="3"></td>
         <td class="text-right">₹ ${totalSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
       </tr>
     </tfoot>
@@ -1217,13 +1230,64 @@ export const generatePerformaHtml = (performa: any): string => {
     return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
+  const rawSubtotal = (performa.products || []).reduce(
+    (acc: number, p: any) =>
+      acc +
+      (p.allocatedAmount !== undefined && Number(p.allocatedAmount) > 0
+        ? Number(p.allocatedAmount)
+        : (Number(p.requiredCases) || 0) * (Number(p.rate) || 0) * (Number(p.pktPerUnit || p.pktUnit) || 1)),
+    0
+  );
+  const subtotalVal = performa.subtotal !== undefined && performa.subtotal > 0 ? performa.subtotal : rawSubtotal;
+
+  const rawDisc = String(performa.discount ?? '').trim();
+  const cleanDisc = rawDisc.replace(/[^0-9.]/g, '');
+  const discNum = parseFloat(cleanDisc) || 0;
+  let discountAmt = 0;
+  if (performa.discountAmount !== undefined && Number(performa.discountAmount) > 0) {
+    discountAmt = Number(performa.discountAmount);
+  } else if (discNum > 0) {
+    if (rawDisc.includes('%') || discNum <= 100) {
+      discountAmt = (subtotalVal * discNum) / 100;
+    } else {
+      discountAmt = discNum;
+    }
+  }
+
+  const baseAfterDiscount = Math.max(0, subtotalVal - discountAmt);
+
+  const rawPack = String(performa.packing ?? '').trim();
+  const cleanPack = rawPack.replace(/[^0-9.]/g, '');
+  const packNum = parseFloat(cleanPack) || 0;
+  let packingAmt = 0;
+  if (performa.packingAmount !== undefined && Number(performa.packingAmount) > 0) {
+    packingAmt = Number(performa.packingAmount);
+  } else if (packNum > 0) {
+    if (rawPack.includes('%') || packNum <= 100) {
+      packingAmt = (baseAfterDiscount * packNum) / 100;
+    } else {
+      packingAmt = packNum;
+    }
+  }
+
+  const rawTax = String(performa.tax ?? '').trim().replace(/[^0-9.]/g, '');
+  const taxNum = parseFloat(rawTax) || 0;
+  let taxAmt = 0;
+  if (performa.taxAmount !== undefined && Number(performa.taxAmount) > 0) {
+    taxAmt = Number(performa.taxAmount);
+  } else if (taxNum > 0) {
+    taxAmt = taxNum;
+  }
+
+  const totalAllocatedVal = Math.max(0, subtotalVal - discountAmt + packingAmt + taxAmt);
+
   const productRowsHtml = (performa.products || []).map((item: any, idx: number) => {
     const isEven = idx % 2 === 1;
     const prodName = item.productSnapshot?.productName || item.productName || item.particular || 'Product';
     const prodCode = item.productSnapshot?.productCode || item.productCode || '';
-    const compName = item.productSnapshot?.companyName || item.companyName || performa.companyName || '';
+    const compName = (item.companyName && String(item.companyName).trim()) || item.productSnapshot?.companyName || performa.companyName || '';
     const rateVal = parseFloat(String(item.rate || 0)) || 0;
-    const allocatedVal = parseFloat(String(item.allocatedAmount || ((parseFloat(item.requiredCases) || 0) * rateVal * (parseFloat(item.pktPerUnit) || 1)))) || 0;
+    const allocatedVal = parseFloat(String(item.allocatedAmount || ((parseFloat(item.requiredCases) || 0) * rateVal * (parseFloat(item.pktPerUnit || item.pktUnit) || 1)))) || 0;
 
     return `
     <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
@@ -1331,7 +1395,22 @@ export const generatePerformaHtml = (performa: any): string => {
               <span style="color:#475569;">Total Required Cases:</span><strong style="color:#0F172A;">${performa.totalRequiredCases || performa.totalCases || 0}</strong>
             </div>
             <div class="summary-row">
-              <span style="color:#475569;">Total Allocated Value:</span><strong style="color:#0F172A;">₹ ${formatCurrency(performa.totalAllocatedAmount || performa.totalAmount || 0)}</strong>
+              <span style="color:#475569;">Subtotal:</span><strong style="color:#0F172A;">₹ ${formatCurrency(subtotalVal)}</strong>
+            </div>
+            ${discountAmt > 0 ? `
+            <div class="summary-row" style="color: #DC2626;">
+              <span>Discount ${performa.discount ? `(${performa.discount}${String(performa.discount).includes('%') ? '' : '%'})` : ''}:</span><strong style="font-weight: 700;">- ₹ ${formatCurrency(discountAmt)}</strong>
+            </div>` : ''}
+            ${packingAmt > 0 ? `
+            <div class="summary-row" style="color: #475569;">
+              <span>Packing ${performa.packing ? `(${performa.packing}${String(performa.packing).includes('%') ? '' : '%'})` : ''}:</span><strong style="font-weight: 700; color: #0F172A;">+ ₹ ${formatCurrency(packingAmt)}</strong>
+            </div>` : ''}
+            ${taxAmt > 0 ? `
+            <div class="summary-row" style="color: #475569;">
+              <span>Tax (Amount):</span><strong style="font-weight: 700; color: #0F172A;">+ ₹ ${formatCurrency(taxAmt)}</strong>
+            </div>` : ''}
+            <div class="summary-row" style="padding-top: 4px; border-top: 1px dashed #CBD5E1;">
+              <span style="color:#0F172A; font-weight: 700;">Total Allocated Value:</span><strong style="color:#0B4DB7; font-weight: 800; font-size: 13.5px;">₹ ${formatCurrency(totalAllocatedVal)}</strong>
             </div>
             <div style="height: 1px; background: #CBD5E1; margin: 6px 0;"></div>
             <div class="summary-row" style="color: #0B4DB7;">
@@ -1341,7 +1420,7 @@ export const generatePerformaHtml = (performa: any): string => {
             <div class="summary-row" style="color: #DC2626;">
               <span>Advance Consumed:</span><strong style="font-weight: 700;">- ₹ ${formatCurrency(performa.advanceUsedAmount)}</strong>
             </div>` : ''}
-            <div class="summary-row" style="padding-top: 6px; border-top: 2px solid #0B4DB7; margin-top: 4px; font-size: 13.5px; color: #166534;">
+            <div class="summary-row" style="padding-top: 6px; border-top: 2px solid #0B4DB7; margin-top: 4px; font-size: 13px; color: #166534;">
               <span style="font-weight: 800;">Remaining Advance:</span><strong style="font-weight: 900;">₹ ${formatCurrency(performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : performa.advanceAmount)}</strong>
             </div>
           </div>
@@ -1371,13 +1450,15 @@ export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'P
   let totalCases = 0;
   let totalValue = 0;
   let totalAdvance = 0;
+  let totalUsedAdv = 0;
   let totalRemainingAdv = 0;
 
   const rowsHtml = performas.map((p, idx) => {
     const cases = parseFloat(String(p.totalRequiredCases || p.totalCases || 0)) || 0;
     const value = parseFloat(String(p.totalAllocatedAmount || p.totalAmount || 0)) || 0;
-    const adv = parseFloat(String(p.advanceAmount || 0)) || 0;
-    const remAdv = parseFloat(String(p.remainingAdvanceAmount !== undefined ? p.remainingAdvanceAmount : p.advanceAmount || 0)) || 0;
+    const adv = parseFloat(String(p.advanceAmount || p.totalAvailableAmount || 0)) || 0;
+    const usedAdv = parseFloat(String(p.usedAmount !== undefined ? p.usedAmount : (p.advanceUsedAmount || 0))) || 0;
+    const remAdv = parseFloat(String(p.remainingAmount !== undefined ? p.remainingAmount : (p.remainingAdvanceAmount !== undefined ? p.remainingAdvanceAmount : Math.max(0, adv - usedAdv)))) || 0;
     const custName = p.customerSnapshot?.name || p.customerName || '-';
     const compName = p.companyName || p.customerSnapshot?.companyName || '-';
     const isEven = idx % 2 === 1;
@@ -1385,20 +1466,22 @@ export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'P
     totalCases += cases;
     totalValue += value;
     totalAdvance += adv;
+    totalUsedAdv += usedAdv;
     totalRemainingAdv += remAdv;
 
     return `
       <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
-        <td class="text-center" style="width:35px; border: 1px solid #CBD5E1; padding: 6px 4px; color:#64748B;">${idx + 1}</td>
-        <td class="text-center" style="font-weight:800; color:#0B4DB7; width:80px; border: 1px solid #CBD5E1; padding: 6px;">#${p.performaNumber || '-'}</td>
-        <td class="text-center" style="width:80px; border: 1px solid #CBD5E1; padding: 6px; color:#334155;">${p.date || '-'}</td>
-        <td style="font-weight:700; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">${custName}</td>
-        <td style="border: 1px solid #CBD5E1; padding: 6px 8px; color:#475569;">${compName}</td>
-        <td class="text-center" style="width:60px; font-weight:800; border: 1px solid #CBD5E1; padding: 6px;">${cases}</td>
-        <td class="text-center" style="width:75px; border: 1px solid #CBD5E1; padding: 6px; font-size:10.5px; font-weight:700; color:${p.status === 'ACTIVE' ? '#16A34A' : '#D97706'};">${p.status || 'ACTIVE'}</td>
-        <td class="text-right" style="font-weight:700; width:100px; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right" style="font-weight:700; width:100px; color:#0B4DB7; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${adv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right" style="font-weight:800; width:105px; color:#166534; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${remAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-center" style="width:30px; border: 1px solid #CBD5E1; padding: 6px 4px; color:#64748B;">${idx + 1}</td>
+        <td class="text-center" style="font-weight:800; color:#0B4DB7; width:75px; border: 1px solid #CBD5E1; padding: 6px 4px;">#${p.performaNumber || '-'}</td>
+        <td class="text-center" style="width:75px; border: 1px solid #CBD5E1; padding: 6px 4px; color:#334155;">${p.date || '-'}</td>
+        <td style="font-weight:700; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 6px;">${custName}</td>
+        <td style="border: 1px solid #CBD5E1; padding: 6px 6px; color:#475569; font-size:10.5px;">${compName}</td>
+        <td class="text-center" style="width:45px; font-weight:800; border: 1px solid #CBD5E1; padding: 6px 4px;">${cases}</td>
+        <td class="text-center" style="width:70px; border: 1px solid #CBD5E1; padding: 6px 4px; font-size:10px; font-weight:700; color:${p.status === 'ACTIVE' ? '#16A34A' : '#D97706'};">${p.status || 'ACTIVE'}</td>
+        <td class="text-right" style="font-weight:700; width:90px; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right" style="font-weight:700; width:90px; color:#0B4DB7; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${adv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right" style="font-weight:700; width:90px; color:${usedAdv > 0 ? '#DC2626' : '#64748B'}; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${usedAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right" style="font-weight:800; width:95px; color:#166534; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${remAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
       </tr>
     `;
   }).join('');
@@ -1416,16 +1499,16 @@ export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'P
     .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0F172A; padding-bottom: 8px; margin-bottom: 10px; }
     .title { font-size: 24px; font-weight: 900; color: #0B4DB7; letter-spacing: -0.01em; }
     .date-badge { display: inline-block; background: #EFF6FF; color: #0B4DB7; border: 1px solid #BFDBFE; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-top: 4px; }
-    .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
-    .kpi-box { border: 1px solid #CBD5E1; border-radius: 6px; padding: 7px 12px; background: #F8FAFC; }
-    .kpi-lbl { font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase; }
-    .kpi-num { font-size: 14.5px; font-weight: 900; margin-top: 2px; color: #0F172A; }
+    .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 10px; }
+    .kpi-box { border: 1px solid #CBD5E1; border-radius: 6px; padding: 7px 10px; background: #F8FAFC; }
+    .kpi-lbl { font-size: 9.5px; font-weight: 700; color: #64748B; text-transform: uppercase; }
+    .kpi-num { font-size: 14px; font-weight: 900; margin-top: 2px; color: #0F172A; }
     .table { width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #0F172A; }
-    .table th { background: #0F172A; color: #FFFFFF; border: 1px solid #0F172A; padding: 6px; font-weight: 800; font-size: 10.5px; text-transform: uppercase; }
+    .table th { background: #0F172A; color: #FFFFFF; border: 1px solid #0F172A; padding: 6px 4px; font-weight: 800; font-size: 10px; text-transform: uppercase; }
     .table td { border: 1px solid #CBD5E1; padding: 5px 6px; }
     .text-center { text-align: center; }
     .text-right { text-align: right; }
-    .totals td { background: #0F172A !important; color: #FFFFFF !important; border: 1px solid #0F172A !important; font-weight: 900; font-size: 11.5px; padding: 7px 6px; }
+    .totals td { background: #0F172A !important; color: #FFFFFF !important; border: 1px solid #0F172A !important; font-weight: 900; font-size: 11px; padding: 7px 6px; }
     .sig-section { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 22px; padding-top: 12px; border-top: 1px dashed #CBD5E1; font-size: 11px; page-break-inside: avoid; }
   </style>
 </head>
@@ -1457,6 +1540,10 @@ export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'P
       <div class="kpi-lbl">Total Allocated Value</div>
       <div class="kpi-num" style="color:#0F172A;">₹ ${totalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
     </div>
+    <div class="kpi-box" style="background-color:#FEF2F2; border-color:#FECACA;">
+      <div class="kpi-lbl" style="color:#991B1B;">Total Advance Consumed</div>
+      <div class="kpi-num" style="color:#DC2626;">₹ ${totalUsedAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+    </div>
     <div class="kpi-box" style="background-color:#F0FDF4; border-color:#BBF7D0;">
       <div class="kpi-lbl" style="color:#166534;">Remaining Advance Balance</div>
       <div class="kpi-num" style="color:#16A34A;">₹ ${totalRemainingAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
@@ -1466,20 +1553,21 @@ export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'P
   <table class="table">
     <thead>
       <tr>
-        <th class="text-center" style="width:35px;">#</th>
-        <th class="text-center" style="width:80px;">Performa #</th>
-        <th class="text-center" style="width:80px;">Date</th>
+        <th class="text-center" style="width:30px;">#</th>
+        <th class="text-center" style="width:75px;">Performa #</th>
+        <th class="text-center" style="width:75px;">Date</th>
         <th>Customer Name</th>
         <th>Company</th>
-        <th class="text-center" style="width:60px;">Cases</th>
-        <th class="text-center" style="width:75px;">Status</th>
-        <th class="text-right" style="width:100px;">Total Value</th>
-        <th class="text-right" style="width:100px;">Advance</th>
-        <th class="text-right" style="width:105px;">Rem. Advance</th>
+        <th class="text-center" style="width:45px;">Cases</th>
+        <th class="text-center" style="width:70px;">Status</th>
+        <th class="text-right" style="width:90px;">Total Value</th>
+        <th class="text-right" style="width:90px;">Total Advance</th>
+        <th class="text-right" style="width:90px;">Adv. Consumed</th>
+        <th class="text-right" style="width:95px;">Rem. Advance</th>
       </tr>
     </thead>
     <tbody>
-      ${rowsHtml || '<tr><td colspan="10" class="text-center" style="padding:18px; color:#64748B;">No performa records found for the selected period.</td></tr>'}
+      ${rowsHtml || '<tr><td colspan="11" class="text-center" style="padding:18px; color:#64748B;">No performa records found for the selected period.</td></tr>'}
     </tbody>
     <tfoot>
       <tr class="totals">
@@ -1488,6 +1576,7 @@ export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'P
         <td></td>
         <td class="text-right">₹ ${totalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
         <td class="text-right">₹ ${totalAdvance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right">₹ ${totalUsedAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
         <td class="text-right">₹ ${totalRemainingAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
       </tr>
     </tfoot>

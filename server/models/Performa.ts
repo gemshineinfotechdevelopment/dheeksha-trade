@@ -39,6 +39,13 @@ export interface IPerforma extends Document {
   totalRequiredCases: number;
   totalUsedCases: number;
   totalRemainingCases: number;
+  subtotal?: number;
+  discount?: string | number;
+  discountAmount?: number;
+  packing?: string | number;
+  packingAmount?: number;
+  tax?: string | number;
+  taxAmount?: number;
   totalAllocatedAmount: number;
   totalUsedAmount: number;
   totalRemainingAmount: number;
@@ -88,6 +95,13 @@ const PerformaSchema: Schema = new Schema(
     totalRequiredCases: { type: Number, required: true, min: 0, default: 0 },
     totalUsedCases: { type: Number, required: true, min: 0, default: 0 },
     totalRemainingCases: { type: Number, required: true, min: 0, default: 0 },
+    subtotal: { type: Number, default: 0 },
+    discount: { type: String, trim: true, default: '0' },
+    discountAmount: { type: Number, default: 0 },
+    packing: { type: String, trim: true, default: '0' },
+    packingAmount: { type: Number, default: 0 },
+    tax: { type: String, trim: true, default: '0' },
+    taxAmount: { type: Number, default: 0 },
     totalAllocatedAmount: { type: Number, required: true, min: 0, default: 0 },
     totalUsedAmount: { type: Number, required: true, min: 0, default: 0 },
     totalRemainingAmount: { type: Number, required: true, min: 0, default: 0 },

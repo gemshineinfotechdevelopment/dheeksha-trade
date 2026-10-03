@@ -268,13 +268,47 @@ export const sharePerformaOnWhatsApp = async (performa: any, phone?: string) => 
   const custName = performa.customerSnapshot?.name || performa.customerName || 'Customer';
   const pfNum = performa.performaNumber || 'PF';
   const totalCases = performa.totalCases || performa.products?.reduce((s: number, p: any) => s + (Number(p.requiredCases) || 0), 0) || 0;
-  const totalAmount = performa.totalAmount || performa.products?.reduce((s: number, p: any) => s + (Number(p.allocatedAmount) || ((Number(p.requiredCases) || 0) * (Number(p.rate) || 0) * (Number(p.pktPerUnit) || 1)) || 0), 0) || 0;
+  const rawSubtotal = (performa.products || []).reduce((s: number, p: any) => s + (Number(p.allocatedAmount) || ((Number(p.requiredCases) || 0) * (Number(p.rate) || 0) * (Number(p.pktPerUnit) || 1)) || 0), 0);
+  const subtotalVal = performa.subtotal !== undefined ? Number(performa.subtotal) : rawSubtotal;
+  const cleanDisc = String(performa.discount || '0').trim();
+  const discNum = parseFloat(cleanDisc) || 0;
+  let discountAmt = performa.discountAmount !== undefined ? Number(performa.discountAmount) : 0;
+  if (!discountAmt && discNum > 0) {
+    if (cleanDisc.endsWith('%') || discNum <= 100) {
+      discountAmt = (subtotalVal * discNum) / 100;
+    } else {
+      discountAmt = discNum;
+    }
+  }
+  const baseAfterDiscount = Math.max(0, subtotalVal - discountAmt);
+  const cleanPack = String(performa.packing || '0').trim();
+  const packNum = parseFloat(cleanPack) || 0;
+  let packingAmt = performa.packingAmount !== undefined ? Number(performa.packingAmount) : 0;
+  if (!packingAmt && packNum > 0) {
+    if (cleanPack.endsWith('%') || packNum <= 100) {
+      packingAmt = (baseAfterDiscount * packNum) / 100;
+    } else {
+      packingAmt = packNum;
+    }
+  }
+  const cleanTax = String(performa.tax || '0').trim().replace(/[^0-9.]/g, '');
+  const taxAmt = performa.taxAmount !== undefined ? Number(performa.taxAmount) : (parseFloat(cleanTax) || 0);
+
+  const totalAmount =
+    performa.totalAllocatedAmount !== undefined
+      ? performa.totalAllocatedAmount
+      : performa.totalAmount || Math.max(0, subtotalVal - discountAmt + packingAmt + taxAmt);
 
   const itemsText = (performa.products || [])
-    .map(
-      (p: any, i: number) =>
-        `${i + 1}. *${p.productSnapshot?.productName || p.productName}* - ${p.requiredCases} Cases @ ₹${p.rate} = *₹${p.allocatedAmount || ((Number(p.requiredCases) || 0) * (Number(p.rate) || 0) * (Number(p.pktPerUnit) || 1))}*`
-    )
+    .map((p: any, i: number) => {
+      const pName = p.productSnapshot?.productName || p.productName || 'Product';
+      const compName = p.productSnapshot?.companyName || p.companyName || '';
+      const compLabel = compName ? ` [${compName}]` : '';
+      const pCases = p.requiredCases || 0;
+      const pRate = p.rate || 0;
+      const pAlloc = p.allocatedAmount || (Number(pCases) * Number(pRate) * (Number(p.pktPerUnit) || 1));
+      return `${i + 1}. *${pName}*${compLabel} - ${pCases} Cases @ ₹${pRate} = *₹${Number(pAlloc).toLocaleString('en-IN', { minimumFractionDigits: 2 })}*`;
+    })
     .join('\n');
 
   const text = `*DHEEKSHA TRADE - PERFORMA INVOICE / QUOTATION* 📝
@@ -288,7 +322,8 @@ export const sharePerformaOnWhatsApp = async (performa: any, phone?: string) => 
 ${itemsText || '-'}
 ----------------------------------------
 *Total Cases:* ${totalCases}
-*Total Value:* ₹${Number(totalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+*Subtotal:* ₹${subtotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+${discountAmt > 0 ? `*Discount:* ${performa.discount ? `${performa.discount}${String(performa.discount).includes('%') ? '' : '%'}` : ''} (-₹${discountAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })})\n` : ''}${packingAmt > 0 ? `*Packing:* ${performa.packing ? `${performa.packing}${String(performa.packing).includes('%') ? '' : '%'}` : ''} (+₹${packingAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })})\n` : ''}${taxAmt > 0 ? `*Tax:* ₹${taxAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` : ''}*TOTAL ALLOCATED VALUE:* ₹${Number(totalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
 *Advance Received:* ₹${Number(performa.advanceAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
 *Remaining Advance:* ₹${Number(performa.remainingAdvanceAmount ?? performa.advanceAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
 ----------------------------------------

@@ -35,7 +35,6 @@ import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded';
 import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceWalletRounded';
 import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
-import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded';
 import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded';
 import PrintOutlinedIcon from '@mui/icons-material/PrintOutlined';
@@ -110,7 +109,6 @@ export const PerformaPage: FC<PerformaPageProps> = ({
 
   // Selected Customer Details & Performa Summary
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
-  const [selectedCompany, setSelectedCompany] = useState<string>('');
   const [customerPerformaSummary, setCustomerPerformaSummary] = useState<any | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
 
@@ -122,6 +120,9 @@ export const PerformaPage: FC<PerformaPageProps> = ({
   });
   const [depositAdvance, setDepositAdvance] = useState<string>('0');
   const [notes, setNotes] = useState<string>('');
+  const [discount, setDiscount] = useState<string>('');
+  const [packing, setPacking] = useState<string>('');
+  const [tax, setTax] = useState<string>('');
 
   // Product Requirement Entry Line
   const [selectedProductObj, setSelectedProductObj] = useState<any | null>(null);
@@ -160,6 +161,9 @@ export const PerformaPage: FC<PerformaPageProps> = ({
   const [editAdvanceAmount, setEditAdvanceAmount] = useState<string>('0');
   const [editStatus, setEditStatus] = useState<string>('ACTIVE');
   const [editNotes, setEditNotes] = useState<string>('');
+  const [editDiscount, setEditDiscount] = useState<string>('');
+  const [editPacking, setEditPacking] = useState<string>('');
+  const [editTax, setEditTax] = useState<string>('');
   const [editProducts, setEditProducts] = useState<EditProductItem[]>([]);
 
 
@@ -267,7 +271,17 @@ export const PerformaPage: FC<PerformaPageProps> = ({
     }
   }, [selectedCustomer, customerPerformaSearch]);
 
-  // When product dropdown selected, autofill code and rate if available
+  // Filter available products by selected productCompany for smart autofill/selection
+  const filteredProductsForEntry = useMemo(() => {
+    if (!productCompany || !productCompany.trim() || productCompany.trim().toLowerCase() === 'general') return products;
+    const comp = productCompany.trim().toLowerCase();
+    const matched = products.filter(
+      (p: any) => p.companyName && p.companyName.trim().toLowerCase() === comp
+    );
+    return matched.length > 0 ? matched : products;
+  }, [products, productCompany]);
+
+  // When product dropdown selected, autofill code, company, rate without overwriting user entered company
   const handleProductSelect = (prod: any | null) => {
     setSelectedProductObj(prod);
     if (prod) {
@@ -275,10 +289,11 @@ export const PerformaPage: FC<PerformaPageProps> = ({
       setProductCode(prod.code || prod.idCode || `#${prod.slNo || ''}`);
       setRate(prod.rate ? String(prod.rate) : '');
       setPktUnit(prod.pktUnit || '1');
-      if (prod.companyName) {
-        setProductCompany(prod.companyName);
-      } else if (selectedCompany) {
-        setProductCompany(selectedCompany);
+      // If product has a brand name and user hasn't typed one yet, autofill it
+      if (prod.companyName && prod.companyName.toLowerCase() !== 'general') {
+        if (!productCompany.trim() || productCompany.trim().toLowerCase() === 'general') {
+          setProductCompany(prod.companyName);
+        }
       }
     } else {
       setProductName('');
@@ -308,12 +323,18 @@ export const PerformaPage: FC<PerformaPageProps> = ({
     const unitsVal = parseFloat(pktUnit) || 1;
     const allocatedAmt = (casesVal * rateVal * unitsVal).toFixed(2);
 
+    const rowCompany =
+      productCompany.trim() ||
+      (selectedProductObj?.companyName && selectedProductObj.companyName.toLowerCase() !== 'general' ? selectedProductObj.companyName : '') ||
+      (selectedCustomer?.companyName && selectedCustomer.companyName.toLowerCase() !== 'general' ? selectedCustomer.companyName : '') ||
+      '';
+
     const newRow: ProductRowItem = {
       id: Date.now().toString(),
       productId: selectedProductObj?._id,
       productCode: productCode.trim() || `SKU-${Date.now().toString().slice(-4)}`,
       productName: trimmedName,
-      companyName: productCompany.trim() || selectedCompany || '',
+      companyName: rowCompany,
       category: selectedProductObj?.category || 'Trading',
       requiredCases: String(casesVal),
       rate: String(rateVal),
@@ -323,11 +344,10 @@ export const PerformaPage: FC<PerformaPageProps> = ({
 
     setProductRows((prev) => [...prev, newRow]);
 
-    // Reset entry fields
+    // Reset entry fields but preserve company for rapid sequential additions
     setSelectedProductObj(null);
     setProductName('');
     setProductCode('');
-    setProductCompany('');
     setRequiredCases('');
     setRate('');
     setPktUnit('1');
@@ -337,14 +357,82 @@ export const PerformaPage: FC<PerformaPageProps> = ({
     setProductRows((prev) => prev.filter((r) => r.id !== id));
   };
 
+  // Group products by Company Name (Set of products grouped like wholesale order sheet)
+  const groupedProductRows = useMemo(() => {
+    const groups: { [company: string]: ProductRowItem[] } = {};
+    for (const row of productRows) {
+      const comp = row.companyName?.trim() || 'General';
+      if (!groups[comp]) {
+        groups[comp] = [];
+      }
+      groups[comp].push(row);
+    }
+    return groups;
+  }, [productRows]);
+
+  // Unique companies added in current performa (excluding empty or general)
+  const uniqueAddedCompanies = useMemo(() => {
+    return Array.from(
+      new Set(
+        productRows
+          .map((r) => r.companyName?.trim())
+          .filter((c): c is string => Boolean(c) && c.toLowerCase() !== 'general')
+      )
+    );
+  }, [productRows]);
+
   // Calculate Aggregates
   const totalRequiredCasesCount = useMemo(() => {
     return productRows.reduce((acc, r) => acc + (parseFloat(r.requiredCases) || 0), 0);
   }, [productRows]);
 
-  const totalAllocatedValue = useMemo(() => {
+  const subtotalAllocatedValue = useMemo(() => {
     return productRows.reduce((acc, r) => acc + (parseFloat(r.allocatedAmount) || 0), 0);
   }, [productRows]);
+
+  // Discount Calculation (Supports % like 5% or 5 or flat rupees)
+  const discountVal = useMemo(() => {
+    if (!discount) return 0;
+    const cleanDisc = String(discount).trim();
+    const num = parseFloat(cleanDisc) || 0;
+    if (num <= 0) return 0;
+    if (cleanDisc.endsWith('%') || num <= 100) {
+      return (subtotalAllocatedValue * num) / 100;
+    }
+    return num;
+  }, [discount, subtotalAllocatedValue]);
+
+  // Discounted base (only on this discounted amount, packing charge is applied)
+  const baseAfterDiscount = useMemo(() => {
+    return Math.max(0, subtotalAllocatedValue - discountVal);
+  }, [subtotalAllocatedValue, discountVal]);
+
+  // Packing Calculation (Applied ONLY on discounted amount, supports decimals e.g. 2.5%, 3.75%)
+  const packingVal = useMemo(() => {
+    if (!packing) return 0;
+    const cleanPack = String(packing).trim();
+    const num = parseFloat(cleanPack) || 0;
+    if (num <= 0) return 0;
+    if (cleanPack.endsWith('%') || num <= 100) {
+      return (baseAfterDiscount * num) / 100;
+    }
+    return num;
+  }, [packing, baseAfterDiscount]);
+
+  // Tax Calculation (Manual fixed amount directly added)
+  const taxVal = useMemo(() => {
+    if (!tax) return 0;
+    const cleanTax = String(tax).trim().replace(/[^0-9.]/g, '');
+    const num = parseFloat(cleanTax) || 0;
+    if (num <= 0) return 0;
+    return num;
+  }, [tax]);
+
+  // Final Net Total Allocated Amount
+  const finalTotalAllocatedValue = useMemo(() => {
+    const net = Math.max(0, subtotalAllocatedValue - discountVal + packingVal + taxVal);
+    return Number(net.toFixed(2));
+  }, [subtotalAllocatedValue, discountVal, packingVal, taxVal]);
 
   const currentEnteredAdvance = useMemo(() => {
     return parseFloat(String(depositAdvance).replace(/,/g, '')) || 0;
@@ -386,6 +474,9 @@ export const PerformaPage: FC<PerformaPageProps> = ({
     setProductRows([]);
     setDepositAdvance('0');
     setNotes('');
+    setDiscount('');
+    setPacking('');
+    setTax('');
     setSelectedProductObj(null);
     setProductName('');
     setProductCode('');
@@ -415,26 +506,34 @@ export const PerformaPage: FC<PerformaPageProps> = ({
 
     try {
       setSubmitLoading(true);
+      const combinedCompanyName =
+        uniqueAddedCompanies.length > 0
+          ? uniqueAddedCompanies.join(', ')
+          : productCompany?.trim() || selectedCustomer.companyName || '';
+
       const payload = {
         performaNumber,
-        companyName: selectedCompany,
+        companyName: combinedCompanyName,
         customerId: selectedCustomer._id,
         customerSnapshot: {
           name: selectedCustomer.name,
           phone: selectedCustomer.mobile || selectedCustomer.phone || '',
-          companyName: selectedCompany || selectedCustomer.companyName || '',
+          companyName: combinedCompanyName || selectedCustomer.companyName || '',
           address: selectedCustomer.address || '',
           gst: selectedCustomer.gst || '',
         },
         advanceAmount: currentEnteredAdvance,
         date: date,
         notes: notes.trim(),
+        discount: discount || '0',
+        packing: packing || '0',
+        tax: tax || '0',
         products: productRows.map((r) => ({
           productId: r.productId,
           productSnapshot: {
             productCode: r.productCode,
             productName: r.productName,
-            companyName: r.companyName || selectedCompany || '',
+            companyName: r.companyName || productCompany || '',
             category: r.category,
           },
           requiredCases: parseFloat(r.requiredCases) || 0,
@@ -458,7 +557,7 @@ export const PerformaPage: FC<PerformaPageProps> = ({
       // Prepare print data
       const printData: PerformaPrintData = {
         performaNumber: created.performaNumber || performaNumber,
-        companyName: created.companyName || selectedCompany,
+        companyName: created.companyName || combinedCompanyName || productCompany,
         date: created.date || date,
         customerSnapshot: created.customerSnapshot || payload.customerSnapshot,
         advanceAmount: created.advanceAmount || currentEnteredAdvance,
@@ -475,7 +574,14 @@ export const PerformaPage: FC<PerformaPageProps> = ({
           allocatedAmount: p.allocatedAmount,
         })),
         totalRequiredCases: created.totalRequiredCases || totalRequiredCasesCount,
-        totalAllocatedAmount: created.totalAllocatedAmount || totalAllocatedValue,
+        subtotal: created.subtotal || subtotalAllocatedValue,
+        discount: created.discount || discount || '0',
+        discountAmount: created.discountAmount !== undefined ? created.discountAmount : discountVal,
+        packing: created.packing || packing || '0',
+        packingAmount: created.packingAmount !== undefined ? created.packingAmount : packingVal,
+        tax: created.tax || tax || '0',
+        taxAmount: created.taxAmount !== undefined ? created.taxAmount : taxVal,
+        totalAllocatedAmount: created.totalAllocatedAmount || finalTotalAllocatedValue,
         status: created.status || 'ACTIVE',
         notes: created.notes || notes,
       };
@@ -539,6 +645,13 @@ export const PerformaPage: FC<PerformaPageProps> = ({
       totalRequiredCases: performa.totalRequiredCases,
       totalUsedCases: performa.totalUsedCases,
       totalRemainingCases: performa.totalRemainingCases,
+      subtotal: performa.subtotal,
+      discount: performa.discount,
+      discountAmount: performa.discountAmount,
+      packing: performa.packing,
+      packingAmount: performa.packingAmount,
+      tax: performa.tax,
+      taxAmount: performa.taxAmount,
       totalAllocatedAmount: performa.totalAllocatedAmount,
       totalUsedAmount: performa.totalUsedAmount,
       totalRemainingAmount: performa.totalRemainingAmount,
@@ -568,6 +681,9 @@ export const PerformaPage: FC<PerformaPageProps> = ({
       setEditAdvanceAmount(String(data.advanceAmount || 0));
       setEditStatus(data.status || 'ACTIVE');
       setEditNotes(data.notes || '');
+      setEditDiscount(data.discount !== undefined ? String(data.discount) : '');
+      setEditPacking(data.packing !== undefined ? String(data.packing) : '');
+      setEditTax(data.tax !== undefined ? String(data.tax) : '');
 
       const loadedProducts: EditProductItem[] = (data.products || []).map((p: any, idx: number) => ({
         id: p._id || String(idx) + '-' + Date.now(),
@@ -615,9 +731,48 @@ export const PerformaPage: FC<PerformaPageProps> = ({
     return editProducts.reduce((sum, p) => sum + (parseFloat(String(p.requiredCases)) || 0), 0);
   }, [editProducts]);
 
-  const editTotalAllocated = useMemo(() => {
+  const editSubtotalAllocated = useMemo(() => {
     return editProducts.reduce((sum, p) => sum + (parseFloat(String(p.allocatedAmount)) || 0), 0);
   }, [editProducts]);
+
+  const editDiscountVal = useMemo(() => {
+    if (!editDiscount) return 0;
+    const cleanDisc = String(editDiscount).trim();
+    const num = parseFloat(cleanDisc) || 0;
+    if (num <= 0) return 0;
+    if (cleanDisc.endsWith('%') || num <= 100) {
+      return (editSubtotalAllocated * num) / 100;
+    }
+    return num;
+  }, [editDiscount, editSubtotalAllocated]);
+
+  const editBaseAfterDiscount = useMemo(() => {
+    return Math.max(0, editSubtotalAllocated - editDiscountVal);
+  }, [editSubtotalAllocated, editDiscountVal]);
+
+  const editPackingVal = useMemo(() => {
+    if (!editPacking) return 0;
+    const cleanPack = String(editPacking).trim();
+    const num = parseFloat(cleanPack) || 0;
+    if (num <= 0) return 0;
+    if (cleanPack.endsWith('%') || num <= 100) {
+      return (editBaseAfterDiscount * num) / 100;
+    }
+    return num;
+  }, [editPacking, editBaseAfterDiscount]);
+
+  const editTaxVal = useMemo(() => {
+    if (!editTax) return 0;
+    const cleanTax = String(editTax).trim().replace(/[^0-9.]/g, '');
+    const num = parseFloat(cleanTax) || 0;
+    if (num <= 0) return 0;
+    return num;
+  }, [editTax]);
+
+  const editFinalTotalAllocated = useMemo(() => {
+    const net = Math.max(0, editSubtotalAllocated - editDiscountVal + editPackingVal + editTaxVal);
+    return Number(net.toFixed(2));
+  }, [editSubtotalAllocated, editDiscountVal, editPackingVal, editTaxVal]);
 
   const handleSaveEditPerforma = async () => {
     if (!editPerformaId) return;
@@ -628,12 +783,24 @@ export const PerformaPage: FC<PerformaPageProps> = ({
 
     try {
       setEditLoading(true);
+      const uniqueCompanies = Array.from(
+        new Set(
+          editProducts
+            .map((p) => p.companyName?.trim())
+            .filter((c): c is string => Boolean(c))
+        )
+      );
+      const combinedCompanyName =
+        uniqueCompanies.length > 0
+          ? uniqueCompanies.join(', ')
+          : editCompanyName.trim() || 'General';
+
       const payload = {
-        companyName: editCompanyName.trim(),
+        companyName: combinedCompanyName,
         customerSnapshot: {
           name: editCustomerName.trim(),
           phone: editCustomerPhone.trim(),
-          companyName: editCompanyName.trim(),
+          companyName: combinedCompanyName || editCustomerName.trim(),
           address: editCustomerAddress.trim(),
           gst: editCustomerGst.trim(),
         },
@@ -641,6 +808,9 @@ export const PerformaPage: FC<PerformaPageProps> = ({
         date: editDate,
         status: editStatus,
         notes: editNotes.trim(),
+        discount: editDiscount || '0',
+        packing: editPacking || '0',
+        tax: editTax || '0',
         products: editProducts.map((p) => ({
           productId: p.productId,
           productSnapshot: {
@@ -883,44 +1053,8 @@ export const PerformaPage: FC<PerformaPageProps> = ({
             >
               <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                 <PersonOutlineRoundedIcon sx={{ color: '#0B4DB7', fontSize: 20 }} />
-                Customer & Company Details
+                Customer Details
               </Typography>
-
-              {/* Company / Brand Name Dropdown */}
-              <Autocomplete
-                freeSolo
-                options={companies.map((c: any) => c.name).filter(Boolean)}
-                value={selectedCompany}
-                onChange={(_e, val) => setSelectedCompany(val || '')}
-                onInputChange={(_e, val) => setSelectedCompany(val || '')}
-                renderOption={(props, option) => {
-                  const compObj = companies.find((c: any) => c.name === option);
-                  return (
-                    <Box component="li" {...props} key={props.key || option} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', py: 0.8 }}>
-                      <Typography sx={{ fontWeight: 700, fontSize: '13.5px', color: '#0F172A' }}>
-                        {option}
-                      </Typography>
-                      {compObj && (compObj.gstin || compObj.address) && (
-                        <Typography sx={{ fontSize: '11px', color: '#64748B' }}>
-                          {compObj.gstin && compObj.gstin !== 'N/A' ? `GST: ${compObj.gstin}` : ''}
-                          {compObj.gstin && compObj.address ? ' • ' : ''}
-                          {compObj.address || ''}
-                        </Typography>
-                      )}
-                    </Box>
-                  );
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Company / Brand Name"
-                    placeholder="Select company from list or enter brand name..."
-                    size="small"
-                    fullWidth
-                  />
-                )}
-                sx={{ mb: 2 }}
-              />
 
               {/* Customer Selector */}
               <Autocomplete
@@ -1112,7 +1246,7 @@ export const PerformaPage: FC<PerformaPageProps> = ({
             </Paper>
           </Box>
 
-          {/* Product Requirement Entry Card */}
+          {/* Product Required Section (Grouped Wholesale Order Sheet Layout) */}
           <Paper
             elevation={0}
             sx={{
@@ -1123,240 +1257,671 @@ export const PerformaPage: FC<PerformaPageProps> = ({
               backgroundColor: '#FFFFFF',
             }}
           >
-            <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Inventory2OutlinedIcon sx={{ color: '#0B4DB7', fontSize: 20 }} />
-              Product Requirement / Allocation Entry
-            </Typography>
-
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: '1.5fr 1.2fr 1fr 1fr 0.8fr auto' },
-                gap: 2,
-                alignItems: 'center',
-                backgroundColor: '#F8FAFC',
-                p: 2,
-                borderRadius: '8px',
-                border: '1px solid #EEF2F6',
-                mb: 2.5,
-              }}
-            >
-              {/* Select Product */}
-              <Autocomplete
-                options={products}
-                getOptionLabel={(option) => `${option.name} ${option.code ? `(${option.code})` : ''}`}
-                value={selectedProductObj}
-                onChange={(_e, val) => handleProductSelect(val)}
-                freeSolo
-                onInputChange={(_e, newInputValue) => setProductName(newInputValue)}
-                renderInput={(params) => (
-                  <TextField {...params} label="Product Name / SKU" size="small" placeholder="Select or type item..." />
-                )}
-              />
-
-              {/* Company / Brand */}
-              <Autocomplete
-                freeSolo
-                options={companies.map((c: any) => c.name).filter(Boolean)}
-                value={productCompany}
-                onChange={(_e, val) => setProductCompany(val || '')}
-                onInputChange={(_e, val) => setProductCompany(val || '')}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Company / Brand"
+            {/* Header Title and Tagline */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5, flexWrap: 'wrap', gap: 1.5 }}>
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+                  <ReceiptLongRoundedIcon sx={{ color: '#0B4DB7', fontSize: 24 }} />
+                  <Typography variant="h6" sx={{ fontSize: '18px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.2px' }}>
+                    Product Required
+                  </Typography>
+                  <Chip
+                    label="Customer Requirement Entry"
                     size="small"
-                    placeholder="Select / type brand..."
+                    sx={{
+                      backgroundColor: '#EFF6FF',
+                      color: '#0B4DB7',
+                      fontWeight: 700,
+                      fontSize: '11px',
+                      border: '1px solid #DBEAFE',
+                    }}
                   />
-                )}
-              />
-
-              {/* Required Cases */}
-              <TextField
-                label="Required Cases"
-                size="small"
-                type="number"
-                value={requiredCases}
-                onChange={(e) => setRequiredCases(e.target.value)}
-                placeholder="e.g. 20"
-              />
-
-              {/* Rate */}
-              <TextField
-                label="Rate (₹)"
-                size="small"
-                type="number"
-                value={rate}
-                onChange={(e) => setRate(e.target.value)}
-                placeholder="e.g. 5000"
-              />
-
-              {/* Pkt / Units */}
-              <TextField
-                label="Units / Pkt"
-                size="small"
-                type="number"
-                value={pktUnit}
-                onChange={(e) => setPktUnit(e.target.value)}
-              />
-
-              <Button
-                variant="contained"
-                disableElevation
-                onClick={handleAddProductRow}
-                startIcon={<AddRoundedIcon />}
-                sx={{
-                  backgroundColor: '#0B4DB7',
-                  color: '#FFFFFF',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  textTransform: 'none',
-                  borderRadius: '8px',
-                  height: '40px',
-                  px: 2.5,
-                  '&:hover': {
-                    backgroundColor: '#083B8D',
-                  },
-                }}
-              >
-                Add
-              </Button>
-            </Box>
-
-            {/* Table of Added Product Rows */}
-            <TableContainer sx={{ border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-              <Table size="small">
-                <TableHead sx={{ backgroundColor: '#F8FAFC' }}>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 800, color: '#475569' }}>#</TableCell>
-                    <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Product Code</TableCell>
-                    <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Product Name</TableCell>
-                    <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Company / Brand</TableCell>
-                    <TableCell sx={{ fontWeight: 800, textAlign: 'center', color: '#475569' }}>Req Cases</TableCell>
-                    <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Rate (₹)</TableCell>
-                    <TableCell sx={{ fontWeight: 800, textAlign: 'center', color: '#475569' }}>Units/Pkt</TableCell>
-                    <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Allocated Value (₹)</TableCell>
-                    <TableCell sx={{ fontWeight: 800, textAlign: 'center', color: '#475569' }}>Action</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {productRows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={9} sx={{ textAlign: 'center', py: 4, color: '#94A3B8' }}>
-                        No product requirements added yet. Use the form above to add items.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    productRows.map((row, idx) => (
-                      <TableRow key={row.id} hover>
-                        <TableCell sx={{ color: '#64748B' }}>{idx + 1}</TableCell>
-                        <TableCell sx={{ fontWeight: 600, color: '#0F172A' }}>{row.productCode}</TableCell>
-                        <TableCell sx={{ fontWeight: 700, color: '#0F172A' }}>{row.productName}</TableCell>
-                        <TableCell sx={{ color: '#475569' }}>{row.companyName}</TableCell>
-                        <TableCell sx={{ textAlign: 'center', fontWeight: 800, color: '#0B4DB7' }}>
-                          {row.requiredCases}
-                        </TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontWeight: 600 }}>
-                          ₹{parseFloat(row.rate).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell sx={{ textAlign: 'center', color: '#64748B' }}>{row.pktUnit}</TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: '#16A34A' }}>
-                          ₹{parseFloat(row.allocatedAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell sx={{ textAlign: 'center' }}>
-                          <Tooltip title="Remove item">
-                            <IconButton size="small" onClick={() => handleRemoveProductRow(row.id)} sx={{ color: '#DC2626' }}>
-                              <DeleteOutlineRoundedIcon sx={{ fontSize: 18 }} />
-                            </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-
-            {/* Aggregates Summary Box */}
-            <Box
-              sx={{
-                mt: 3,
-                p: 2,
-                borderRadius: '8px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #EEF2F6',
-                display: 'flex',
-                flexWrap: 'wrap',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 2,
-              }}
-            >
-              <Box sx={{ display: 'flex', gap: 3 }}>
-                <Box>
-                  <Typography sx={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>
-                    Total Req Cases
-                  </Typography>
-                  <Typography sx={{ fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>
-                    {totalRequiredCasesCount}
-                  </Typography>
                 </Box>
-                <Box>
-                  <Typography sx={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>
-                    Total Requirement Value
-                  </Typography>
-                  <Typography sx={{ fontSize: '18px', fontWeight: 800, color: '#0B4DB7' }}>
-                    ₹{totalAllocatedValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </Typography>
-                </Box>
+                <Typography sx={{ fontSize: '12px', color: '#64748B', mt: 0.4 }}>
+                  Select/type company first at top. Then enter products and cases. Grouped like wholesale order sheets.
+                </Typography>
               </Box>
 
-              <TextField
-                label="Performa Notes"
-                size="small"
-                placeholder="Optional notes or special conditions..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                sx={{ flex: 1, minWidth: '220px' }}
-              />
-
-              <Box sx={{ display: 'flex', gap: 1.5 }}>
+              {productRows.length > 0 && (
                 <Button
+                  size="small"
                   variant="outlined"
-                  onClick={handleReset}
+                  onClick={() => {
+                    if (window.confirm('Clear all added product requirements?')) {
+                      setProductRows([]);
+                    }
+                  }}
                   startIcon={<RestartAltRoundedIcon />}
                   sx={{
-                    borderColor: '#CBD5E1',
-                    color: '#475569',
-                    fontWeight: 600,
+                    borderColor: '#E2E8F0',
+                    color: '#64748B',
                     textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '12px',
                     borderRadius: '8px',
+                    '&:hover': {
+                      borderColor: '#CBD5E1',
+                      backgroundColor: '#F8FAFC',
+                    },
                   }}
                 >
-                  Reset
+                  Reset Items
                 </Button>
+              )}
+            </Box>
+
+            {/* 1. Dedicated Company Selection Card */}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2.5,
+                mb: 2.5,
+                borderRadius: '10px',
+                border: '1.5px solid #BFDBFE',
+                backgroundColor: '#F0F7FF',
+              }}
+            >
+              <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#1E40AF', mb: 1.5, display: 'flex', alignItems: 'center', gap: 1, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <BusinessRoundedIcon sx={{ fontSize: 18, color: '#0B4DB7' }} />
+                Company Selection (Type / Select Company First)
+              </Typography>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                <Autocomplete
+                  freeSolo
+                  options={companies.map((c: any) => c.name).filter(Boolean)}
+                  value={productCompany}
+                  onChange={(_e, val) => setProductCompany(val || '')}
+                  onInputChange={(_e, val) => setProductCompany(val || '')}
+                  sx={{ flex: 1, minWidth: '280px', backgroundColor: '#FFFFFF', borderRadius: '8px' }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      placeholder="Type / Select Company (e.g. AJANTA BRAND)..."
+                      size="small"
+                      fullWidth
+                    />
+                  )}
+                />
+
+                {/* Active Company Status Badge */}
+                <Box
+                  sx={{
+                    px: 2.5,
+                    py: 1.2,
+                    borderRadius: '8px',
+                    backgroundColor: productCompany ? '#DBEAFE' : '#E2E8F0',
+                    border: `1.5px solid ${productCompany ? '#93C5FD' : '#CBD5E1'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    minWidth: '220px',
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      backgroundColor: productCompany ? '#0B4DB7' : '#94A3B8',
+                      boxShadow: productCompany ? '0 0 0 3px rgba(11, 77, 183, 0.25)' : 'none',
+                    }}
+                  />
+                  <Box>
+                    <Typography sx={{ fontSize: '10px', fontWeight: 800, color: productCompany ? '#1E40AF' : '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Active Company
+                    </Typography>
+                    <Typography sx={{ fontSize: '13.5px', fontWeight: 900, color: productCompany ? '#0F172A' : '#64748B' }}>
+                      {productCompany || 'None Selected'}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+            </Paper>
+
+            {/* 2. Product Entry Input Row */}
+            <Box
+              sx={{
+                p: 2,
+                mb: 3,
+                borderRadius: '10px',
+                border: '1px solid #E2E8F0',
+                backgroundColor: '#F8FAFC',
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: '2.5fr 1.2fr 1fr 0.8fr auto' },
+                  gap: 1.5,
+                  alignItems: 'center',
+                }}
+              >
+                {/* Customer Product Required */}
+                <Autocomplete
+                  options={filteredProductsForEntry}
+                  getOptionLabel={(option) => {
+                    if (typeof option === 'string') return option;
+                    return `${option.name || ''} ${option.code ? `(${option.code})` : ''} ${option.companyName ? `• ${option.companyName}` : ''}`.trim();
+                  }}
+                  value={selectedProductObj}
+                  onChange={(_e, val) => handleProductSelect(val)}
+                  freeSolo
+                  onInputChange={(_e, newInputValue) => setProductName(newInputValue)}
+                  renderOption={(props, option) => (
+                    <Box component="li" {...props} key={props.key || option._id || option.name} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', py: 0.8 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                        <Typography sx={{ fontWeight: 700, fontSize: '13px', color: '#0F172A' }}>
+                          {option.name}
+                        </Typography>
+                        {option.rate && (
+                          <Typography sx={{ fontWeight: 700, fontSize: '12px', color: '#16A34A' }}>
+                            ₹{parseFloat(option.rate).toLocaleString('en-IN')}
+                          </Typography>
+                        )}
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 0.3 }}>
+                        {option.companyName && (
+                          <Chip
+                            label={option.companyName}
+                            size="small"
+                            sx={{ height: '18px', fontSize: '10px', fontWeight: 600, backgroundColor: '#EFF6FF', color: '#0B4DB7' }}
+                          />
+                        )}
+                        {option.code && (
+                          <Typography sx={{ fontSize: '11px', color: '#64748B' }}>
+                            Code: {option.code}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  )}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Customer Product Required"
+                      size="small"
+                      placeholder={
+                        productCompany
+                          ? `Type product for ${productCompany} (e.g. 1000 WALA)...`
+                          : 'Type product name (e.g. 1000 WALA)...'
+                      }
+                    />
+                  )}
+                />
+
+                {/* Required Cases */}
+                <TextField
+                  label="Required Cases"
+                  size="small"
+                  type="number"
+                  value={requiredCases}
+                  onChange={(e) => setRequiredCases(e.target.value)}
+                  placeholder="Enter Cases (e.g. 1)"
+                />
+
+                {/* Rate */}
+                <TextField
+                  label="Rate (₹)"
+                  size="small"
+                  type="number"
+                  value={rate}
+                  onChange={(e) => setRate(e.target.value)}
+                  placeholder="e.g. 5000"
+                />
+
+                {/* Pkt / Units */}
+                <TextField
+                  label="Units/Pkt"
+                  size="small"
+                  type="number"
+                  value={pktUnit}
+                  onChange={(e) => setPktUnit(e.target.value)}
+                />
+
+                {/* Add Button */}
                 <Button
                   variant="contained"
                   disableElevation
-                  onClick={handleCreatePerforma}
-                  disabled={submitLoading || productRows.length === 0 || !selectedCustomer}
-                  startIcon={<CheckCircleOutlineRoundedIcon />}
+                  onClick={handleAddProductRow}
+                  startIcon={<AddRoundedIcon />}
                   sx={{
                     backgroundColor: '#0B4DB7',
                     color: '#FFFFFF',
-                    fontWeight: 700,
-                    fontSize: '14px',
+                    fontWeight: 800,
+                    fontSize: '13px',
                     textTransform: 'none',
                     borderRadius: '8px',
+                    height: '40px',
                     px: 3,
-                    py: 1,
                     '&:hover': {
                       backgroundColor: '#083B8D',
                     },
                   }}
                 >
-                  {submitLoading ? 'Generating...' : 'Save & Generate Performa'}
+                  + Add
                 </Button>
+              </Box>
+            </Box>
+
+            {/* 3. Grouped Products Tables (By Company / Brand) */}
+            <Box sx={{ mb: 2.5 }}>
+              {Object.keys(groupedProductRows).length === 0 ? (
+                <Box
+                  sx={{
+                    p: 4,
+                    textAlign: 'center',
+                    border: '1.5px dashed #CBD5E1',
+                    borderRadius: '10px',
+                    backgroundColor: '#F8FAFC',
+                    color: '#64748B',
+                  }}
+                >
+                  <Typography sx={{ fontWeight: 600, fontSize: '14px', color: '#475569' }}>
+                    No product requirements added yet.
+                  </Typography>
+                  <Typography sx={{ fontSize: '12.5px', color: '#94A3B8', mt: 0.5 }}>
+                    Select a company above, enter product name & required cases, then click <strong>+ Add</strong>.
+                  </Typography>
+                </Box>
+              ) : (
+                Object.entries(groupedProductRows).map(([groupComp, items]) => {
+                  const groupCases = items.reduce((acc, it) => acc + (parseFloat(it.requiredCases) || 0), 0);
+                  const groupAmount = items.reduce((acc, it) => acc + (parseFloat(it.allocatedAmount) || 0), 0);
+
+                  return (
+                    <Box
+                      key={groupComp}
+                      sx={{
+                        mb: 2.5,
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '10px',
+                        overflow: 'hidden',
+                        backgroundColor: '#FFFFFF',
+                      }}
+                    >
+                      {/* Group Header Row */}
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          backgroundColor: '#F8FAFC',
+                          px: 2.5,
+                          py: 1.3,
+                          borderBottom: '1.5px solid #E2E8F0',
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Typography
+                            sx={{
+                              fontWeight: 900,
+                              fontSize: '15px',
+                              color: '#0F172A',
+                              textDecoration: 'underline',
+                              textDecorationThickness: '2px',
+                              textUnderlineOffset: '4px',
+                              letterSpacing: '0.5px',
+                            }}
+                          >
+                            {groupComp}
+                          </Typography>
+                          <Chip
+                            label={`${items.length} ${items.length === 1 ? 'item' : 'items'}`}
+                            size="small"
+                            sx={{
+                              height: '22px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              backgroundColor: '#FFFFFF',
+                              color: '#475569',
+                              border: '1px solid #CBD5E1',
+                            }}
+                          />
+                        </Box>
+
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Chip
+                            label={`Subtotal: ${groupCases} Cases • ₹${groupAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                            size="small"
+                            sx={{
+                              height: '24px',
+                              fontSize: '12px',
+                              fontWeight: 800,
+                              backgroundColor: '#EFF6FF',
+                              color: '#0B4DB7',
+                              border: '1px solid #BFDBFE',
+                            }}
+                          />
+                        </Box>
+                      </Box>
+
+                      {/* Items Table */}
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead sx={{ backgroundColor: '#FFFFFF' }}>
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 800, color: '#64748B', width: '60px', textAlign: 'center', fontSize: '11px', textTransform: 'uppercase' }}>
+                                S.NO
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 800, color: '#64748B', fontSize: '11px', textTransform: 'uppercase' }}>
+                                CUSTOMER PRODUCT REQUIRED
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 800, textAlign: 'center', color: '#64748B', width: '130px', fontSize: '11px', textTransform: 'uppercase' }}>
+                                REQUIRED CASES
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#64748B', width: '110px', fontSize: '11px', textTransform: 'uppercase' }}>
+                                RATE (₹)
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 800, textAlign: 'center', color: '#64748B', width: '90px', fontSize: '11px', textTransform: 'uppercase' }}>
+                                UNITS/PKT
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#64748B', width: '130px', fontSize: '11px', textTransform: 'uppercase' }}>
+                                AMOUNT (₹)
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 800, textAlign: 'center', width: '80px', fontSize: '11px', textTransform: 'uppercase' }}>
+                                ACTION
+                              </TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {items.map((row, idx) => (
+                              <TableRow key={row.id} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
+                                <TableCell sx={{ textAlign: 'center', fontWeight: 700, color: '#64748B', fontSize: '12.5px' }}>
+                                  {idx + 1}
+                                </TableCell>
+                                <TableCell sx={{ fontWeight: 700, color: '#0F172A', fontSize: '13.5px' }}>
+                                  {row.productName}
+                                </TableCell>
+                                <TableCell sx={{ textAlign: 'center', fontWeight: 800, color: '#0B4DB7', fontSize: '13px' }}>
+                                  {row.requiredCases} Cases
+                                </TableCell>
+                                <TableCell sx={{ textAlign: 'right', fontWeight: 600, color: '#334155', fontSize: '13px' }}>
+                                  ₹{parseFloat(row.rate).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </TableCell>
+                                <TableCell sx={{ textAlign: 'center', color: '#64748B', fontSize: '12.5px' }}>
+                                  {row.pktUnit}
+                                </TableCell>
+                                <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: '#16A34A', fontSize: '13px' }}>
+                                  ₹{parseFloat(row.allocatedAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </TableCell>
+                                <TableCell sx={{ textAlign: 'center' }}>
+                                  <Tooltip title="Remove item">
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => handleRemoveProductRow(row.id)}
+                                      sx={{ color: '#EF4444', '&:hover': { backgroundColor: '#FEE2E2' } }}
+                                    >
+                                      <DeleteOutlineRoundedIcon sx={{ fontSize: 18 }} />
+                                    </IconButton>
+                                  </Tooltip>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  );
+                })
+              )}
+            </Box>
+
+            {/* 4. Total Cases & Items Summary Strip */}
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: '8px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 2,
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#16A34A' }} />
+                <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>
+                  {productRows.length} items entered for{' '}
+                  <span style={{ color: '#0B4DB7', fontWeight: 800 }}>{selectedCustomer?.name || 'Selected Customer'}</span>
+                </Typography>
+              </Box>
+
+              <Card
+                elevation={0}
+                sx={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1.5px solid #BFDBFE',
+                  borderRadius: '8px',
+                  px: 2,
+                  py: 0.8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                }}
+              >
+                <Typography sx={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>
+                  Case Total
+                </Typography>
+                <Typography sx={{ fontSize: '18px', fontWeight: 900, color: '#0B4DB7' }}>
+                  {totalRequiredCasesCount} Cases
+                </Typography>
+              </Card>
+            </Box>
+
+            {/* Financial Adjustments: Discount, Packing (%), Tax (Amount) */}
+            <Box
+              sx={{
+                mt: 3,
+                p: 2.5,
+                borderRadius: '10px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+              }}
+            >
+              <Typography sx={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', mb: 2, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Financial Adjustments & Charges
+              </Typography>
+
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr 1.5fr' },
+                  gap: 2,
+                  mb: 2.5,
+                  alignItems: 'flex-start',
+                }}
+              >
+                {/* 1. Discount */}
+                <Box>
+                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#475569', mb: 0.5 }}>
+                    Discount (% or ₹)
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="e.g. 5% or 500"
+                    value={discount}
+                    onChange={(e) => setDiscount(e.target.value)}
+                    helperText={discountVal > 0 ? `- ₹${discountVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Optional discount'}
+                    slotProps={{
+                      formHelperText: { sx: { color: discountVal > 0 ? '#DC2626' : undefined, fontWeight: 700 } },
+                    }}
+                  />
+                </Box>
+
+                {/* 2. Packing Charge in % */}
+                <Box>
+                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#475569', mb: 0.5 }}>
+                    Packing Charge (%)
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="e.g. 2.5% or 3"
+                    value={packing}
+                    onChange={(e) => setPacking(e.target.value)}
+                    helperText={packingVal > 0 ? `+ ₹${packingVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (on discounted amt)` : 'Supports decimal (e.g. 2.5%)'}
+                    slotProps={{
+                      formHelperText: { sx: { color: packingVal > 0 ? '#0B4DB7' : undefined, fontWeight: 600 } },
+                    }}
+                  />
+                </Box>
+
+                {/* 3. Tax in Amount */}
+                <Box>
+                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#475569', mb: 0.5 }}>
+                    Tax (₹ Amount)
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="e.g. 1000"
+                    value={tax}
+                    onChange={(e) => setTax(e.target.value)}
+                    type="number"
+                    helperText={taxVal > 0 ? `+ ₹${taxVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Fixed tax amount'}
+                    slotProps={{
+                      formHelperText: { sx: { color: taxVal > 0 ? '#166534' : undefined, fontWeight: 600 } },
+                    }}
+                  />
+                </Box>
+
+                {/* 4. Notes */}
+                <Box>
+                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#475569', mb: 0.5 }}>
+                    Performa Notes / Terms
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Optional notes or special delivery conditions..."
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                </Box>
+              </Box>
+
+              {/* Aggregates Summary Box & Action Buttons */}
+              <Box
+                sx={{
+                  pt: 2,
+                  borderTop: '1px solid #E2E8F0',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 2,
+                }}
+              >
+                {/* Live Breakdown Badges */}
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 1.5, sm: 2.5 }, alignItems: 'center' }}>
+                  <Box>
+                    <Typography sx={{ fontSize: '10.5px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>
+                      Total Cases
+                    </Typography>
+                    <Typography sx={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
+                      {totalRequiredCasesCount}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ height: '28px', width: '1px', backgroundColor: '#CBD5E1', display: { xs: 'none', sm: 'block' } }} />
+
+                  <Box>
+                    <Typography sx={{ fontSize: '10.5px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>
+                      Subtotal
+                    </Typography>
+                    <Typography sx={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
+                      ₹{subtotalAllocatedValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </Typography>
+                  </Box>
+
+                  {discountVal > 0 && (
+                    <Box>
+                      <Typography sx={{ fontSize: '10.5px', color: '#DC2626', fontWeight: 700, textTransform: 'uppercase' }}>
+                        Discount ({discount})
+                      </Typography>
+                      <Typography sx={{ fontSize: '16px', fontWeight: 800, color: '#DC2626' }}>
+                        - ₹{discountVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {packingVal > 0 && (
+                    <Box>
+                      <Typography sx={{ fontSize: '10.5px', color: '#475569', fontWeight: 700, textTransform: 'uppercase' }}>
+                        Packing ({packing}%)
+                      </Typography>
+                      <Typography sx={{ fontSize: '16px', fontWeight: 800, color: '#0B4DB7' }}>
+                        + ₹{packingVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {taxVal > 0 && (
+                    <Box>
+                      <Typography sx={{ fontSize: '10.5px', color: '#475569', fontWeight: 700, textTransform: 'uppercase' }}>
+                        Tax (Amount)
+                      </Typography>
+                      <Typography sx={{ fontSize: '16px', fontWeight: 800, color: '#166534' }}>
+                        + ₹{taxVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  <Box sx={{ height: '28px', width: '1px', backgroundColor: '#CBD5E1', display: { xs: 'none', sm: 'block' } }} />
+
+                  <Box>
+                    <Typography sx={{ fontSize: '11px', color: '#0B4DB7', fontWeight: 800, textTransform: 'uppercase' }}>
+                      Total Allocated Value
+                    </Typography>
+                    <Typography sx={{ fontSize: '20px', fontWeight: 900, color: '#0B4DB7' }}>
+                      ₹{finalTotalAllocatedValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                {/* Buttons */}
+                <Box sx={{ display: 'flex', gap: 1.5, ml: 'auto' }}>
+                  <Button
+                    variant="outlined"
+                    onClick={handleReset}
+                    startIcon={<RestartAltRoundedIcon />}
+                    sx={{
+                      borderColor: '#CBD5E1',
+                      color: '#475569',
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      borderRadius: '8px',
+                    }}
+                  >
+                    Reset
+                  </Button>
+                  <Button
+                    variant="contained"
+                    disableElevation
+                    onClick={handleCreatePerforma}
+                    disabled={submitLoading || productRows.length === 0 || !selectedCustomer}
+                    startIcon={<CheckCircleOutlineRoundedIcon />}
+                    sx={{
+                      backgroundColor: '#0B4DB7',
+                      color: '#FFFFFF',
+                      fontWeight: 700,
+                      fontSize: '14px',
+                      textTransform: 'none',
+                      borderRadius: '8px',
+                      px: 3,
+                      py: 1,
+                      '&:hover': {
+                        backgroundColor: '#083B8D',
+                      },
+                    }}
+                  >
+                    {submitLoading ? 'Generating...' : 'Save & Generate Performa'}
+                  </Button>
+                </Box>
               </Box>
             </Box>
           </Paper>
@@ -1766,28 +2331,40 @@ export const PerformaPage: FC<PerformaPageProps> = ({
 
                 <Paper elevation={0} sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: '8px' }}>
                   <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', mb: 1 }}>
-                    Customer Account Financial Overview
+                    Performa Financial Summary
                   </Typography>
                   <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, fontSize: '12.5px' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748B' }}>Initial Advance:</span>
-                      <strong>₹{(selectedPerformaForView.financialSummary?.initialAdvance ?? selectedPerformaForView.advanceAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                      <span style={{ color: '#64748B' }}>Subtotal:</span>
+                      <strong>₹{(selectedPerformaForView.subtotal ?? (selectedPerformaForView.products || []).reduce((s: number, p: any) => s + (p.allocatedAmount || 0), 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748B' }}>Additional Credits:</span>
-                      <strong style={{ color: '#0B4DB7' }}>₹{(selectedPerformaForView.financialSummary?.additionalCredits ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                      <span style={{ color: '#64748B' }}>Discount:</span>
+                      <strong style={{ color: selectedPerformaForView.discountAmount ? '#DC2626' : undefined }}>
+                        {selectedPerformaForView.discountAmount ? `- ₹${selectedPerformaForView.discountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (selectedPerformaForView.discount || '-')}
+                      </strong>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748B' }}>Total Received:</span>
-                      <strong style={{ color: '#1D4ED8' }}>₹{(selectedPerformaForView.financialSummary?.totalAdvanceReceived ?? selectedPerformaForView.advanceAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                      <span style={{ color: '#64748B' }}>Packing Charge:</span>
+                      <strong style={{ color: selectedPerformaForView.packingAmount ? '#0B4DB7' : undefined }}>
+                        {selectedPerformaForView.packingAmount ? `+ ₹${selectedPerformaForView.packingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (selectedPerformaForView.packing ? `${selectedPerformaForView.packing}%` : '-')}
+                      </strong>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748B' }}>Used By Bills:</span>
-                      <strong style={{ color: '#DC2626' }}>₹{(selectedPerformaForView.advanceUsedAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                      <span style={{ color: '#64748B' }}>Tax Amount:</span>
+                      <strong style={{ color: selectedPerformaForView.taxAmount ? '#166534' : undefined }}>
+                        {selectedPerformaForView.taxAmount ? `+ ₹${selectedPerformaForView.taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (selectedPerformaForView.tax ? `₹${selectedPerformaForView.tax}` : '-')}
+                      </strong>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', gridColumn: 'span 2', pt: 0.8, borderTop: '1px solid #EEF2F6' }}>
-                      <span style={{ color: '#166534', fontWeight: 700 }}>Available Balance:</span>
-                      <strong style={{ color: '#16A34A', fontSize: '14.5px' }}>
+                      <span style={{ color: '#0B4DB7', fontWeight: 800 }}>Total Value:</span>
+                      <strong style={{ color: '#0B4DB7', fontSize: '14.5px', fontWeight: 900 }}>
+                        ₹{(selectedPerformaForView.totalAllocatedAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </strong>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gridColumn: 'span 2', pt: 0.5, borderTop: '1px dashed #EEF2F6' }}>
+                      <span style={{ color: '#166534', fontWeight: 700 }}>Available Advance Balance:</span>
+                      <strong style={{ color: '#16A34A', fontSize: '14px' }}>
                         ₹{(selectedPerformaForView.remainingAdvanceAmount ?? selectedPerformaForView.financialSummary?.availableAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </strong>
                     </Box>
@@ -2067,16 +2644,64 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                     placeholder="Optional notes..."
                   />
                 </Box>
+
+                {/* Financial Adjustments in Edit Modal */}
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2, mt: 2, pt: 2, borderTop: '1px solid #EEF2F6' }}>
+                  <TextField
+                    label="Discount (% or ₹)"
+                    size="small"
+                    value={editDiscount}
+                    onChange={(e) => setEditDiscount(e.target.value)}
+                    placeholder="e.g. 5% or 500"
+                    helperText={editDiscountVal > 0 ? `- ₹${editDiscountVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : undefined}
+                    slotProps={{
+                      formHelperText: { sx: { color: '#DC2626', fontWeight: 700 } },
+                    }}
+                  />
+                  <TextField
+                    label="Packing Charge (%)"
+                    size="small"
+                    value={editPacking}
+                    onChange={(e) => setEditPacking(e.target.value)}
+                    placeholder="e.g. 2.5% or 3"
+                    helperText={editPackingVal > 0 ? `+ ₹${editPackingVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Supports decimal (%)'}
+                    slotProps={{
+                      formHelperText: { sx: { color: '#0B4DB7', fontWeight: 600 } },
+                    }}
+                  />
+                  <TextField
+                    label="Tax (₹ Amount)"
+                    size="small"
+                    type="number"
+                    value={editTax}
+                    onChange={(e) => setEditTax(e.target.value)}
+                    placeholder="e.g. 1000"
+                    helperText={editTaxVal > 0 ? `+ ₹${editTaxVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : undefined}
+                    slotProps={{
+                      formHelperText: { sx: { color: '#166534', fontWeight: 600 } },
+                    }}
+                  />
+                </Box>
               </Paper>
 
               <Paper elevation={0} sx={{ p: 2.5, borderRadius: '8px', border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
                   <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
                     Allocated Products & Quantities
                   </Typography>
-                  <Box sx={{ display: 'flex', gap: 2 }}>
-                    <Chip label={`Total Cases: ${editTotalCases}`} sx={{ fontWeight: 800, backgroundColor: '#EFF6FF', color: '#0B4DB7' }} />
-                    <Chip label={`Total Value: ₹${editTotalAllocated.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sx={{ fontWeight: 800, backgroundColor: '#F0FDF4', color: '#166534' }} />
+                  <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                    <Chip label={`Cases: ${editTotalCases}`} sx={{ fontWeight: 800, backgroundColor: '#EFF6FF', color: '#0B4DB7' }} />
+                    <Chip label={`Subtotal: ₹${editSubtotalAllocated.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sx={{ fontWeight: 700, backgroundColor: '#F1F5F9', color: '#475569' }} />
+                    {editDiscountVal > 0 && (
+                      <Chip label={`Discount: -₹${editDiscountVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sx={{ fontWeight: 700, backgroundColor: '#FEF2F2', color: '#DC2626' }} />
+                    )}
+                    {editPackingVal > 0 && (
+                      <Chip label={`Packing: +₹${editPackingVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sx={{ fontWeight: 700, backgroundColor: '#EFF6FF', color: '#0B4DB7' }} />
+                    )}
+                    {editTaxVal > 0 && (
+                      <Chip label={`Tax: +₹${editTaxVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sx={{ fontWeight: 700, backgroundColor: '#F0FDF4', color: '#166534' }} />
+                    )}
+                    <Chip label={`Net Total: ₹${editFinalTotalAllocated.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sx={{ fontWeight: 900, backgroundColor: '#DBEAFE', color: '#1E40AF' }} />
                   </Box>
                 </Box>
 

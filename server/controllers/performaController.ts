@@ -78,14 +78,14 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
 
     const performas = await Performa.find(filter).sort(sortObj).lean();
 
-    // Fetch all audits to calculate initial advance and additional credits per performa
+    // Fetch all audits to calculate initial advance, additional credits, and consumed amounts per performa
     const allAudits = await PerformaAudit.find({}).lean();
-    const auditMap = new Map<string, { initialAdvance: number; additionalCredits: number }>();
+    const auditMap = new Map<string, { initialAdvance: number; additionalCredits: number; consumedAmount: number }>();
 
     for (const a of allAudits) {
       const pId = a.performaId ? String(a.performaId) : '';
       if (!pId) continue;
-      const existing = auditMap.get(pId) || { initialAdvance: 0, additionalCredits: 0 };
+      const existing = auditMap.get(pId) || { initialAdvance: 0, additionalCredits: 0, consumedAmount: 0 };
       const amt = Number(a.amount) || 0;
       if (a.type === 'ADVANCE_RECEIVED') {
         if (a.reference?.includes('Initial Advance') || a.notes?.includes('Initial')) {
@@ -93,6 +93,10 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
         } else {
           existing.additionalCredits += amt;
         }
+      } else if (a.type === 'PERFORMA_CONSUMED') {
+        existing.consumedAmount += amt;
+      } else if (a.type === 'PERFORMA_REVERSED') {
+        existing.consumedAmount = Math.max(0, existing.consumedAmount - amt);
       }
       auditMap.set(pId, existing);
     }
@@ -110,8 +114,18 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
       const initialAdvance = auditData?.initialAdvance || p.advanceAmount || 0;
       const additionalCredits = auditData?.additionalCredits || 0;
       const totalAvailableAmount = Number((p.advanceAmount || 0).toFixed(2));
-      const usedAmount = Number((p.advanceUsedAmount || 0).toFixed(2));
-      const remainingAmount = Number((p.remainingAdvanceAmount || 0).toFixed(2));
+      const usedAmount = Number(
+        (p.advanceUsedAmount !== undefined && p.advanceUsedAmount > 0
+          ? p.advanceUsedAmount
+          : auditData?.consumedAmount || 0
+        ).toFixed(2)
+      );
+      const remainingAmount = Number(
+        (p.remainingAdvanceAmount !== undefined
+          ? p.remainingAdvanceAmount
+          : Math.max(0, totalAvailableAmount - usedAmount)
+        ).toFixed(2)
+      );
 
       totalAdvance += totalAvailableAmount;
       totalUsedAdvance += usedAmount;
@@ -208,6 +222,9 @@ export const createPerforma = async (req: Request, res: Response, next: NextFunc
       notes = '',
       createdBy = 'Admin',
       performaNumber,
+      discount = '0',
+      packing = '0',
+      tax = '0',
     } = req.body;
 
     if (!customerSnapshot || !customerSnapshot.name) {
@@ -254,7 +271,7 @@ export const createPerforma = async (req: Request, res: Response, next: NextFunc
 
     // Process and validate product items
     let totalRequiredCases = 0;
-    let totalAllocatedAmount = 0;
+    let subtotalAmount = 0;
 
     const sanitizedProducts: IPerformaProductItem[] = products.map((item: any) => {
       const reqCases = parseFloat(item.requiredCases) || 0;
@@ -268,7 +285,7 @@ export const createPerforma = async (req: Request, res: Response, next: NextFunc
       );
 
       totalRequiredCases += reqCases;
-      totalAllocatedAmount += allocated;
+      subtotalAmount += allocated;
 
       return {
         productId: item.productId && mongoose.Types.ObjectId.isValid(item.productId) ? item.productId : undefined,
@@ -290,21 +307,66 @@ export const createPerforma = async (req: Request, res: Response, next: NextFunc
       };
     });
 
+    // Calculate Discount, Packing Charge (% on discounted amount), Tax (Amount)
+    const cleanDisc = String(discount || '0').trim();
+    const discNum = parseFloat(cleanDisc) || 0;
+    let discountAmt = 0;
+    if (discNum > 0) {
+      if (cleanDisc.endsWith('%') || discNum <= 100) {
+        discountAmt = (subtotalAmount * discNum) / 100;
+      } else {
+        discountAmt = discNum;
+      }
+    }
+    discountAmt = Number(discountAmt.toFixed(2));
+
+    const baseAfterDiscount = Math.max(0, subtotalAmount - discountAmt);
+
+    const cleanPack = String(packing || '0').trim();
+    const packNum = parseFloat(cleanPack) || 0;
+    let packingAmt = 0;
+    if (packNum > 0) {
+      if (cleanPack.endsWith('%') || packNum <= 100) {
+        packingAmt = (baseAfterDiscount * packNum) / 100;
+      } else {
+        packingAmt = packNum;
+      }
+    }
+    packingAmt = Number(packingAmt.toFixed(2));
+
+    const cleanTax = String(tax || '0').trim().replace(/[^0-9.]/g, '');
+    const taxAmt = Number((parseFloat(cleanTax) || 0).toFixed(2));
+
+    const finalAllocatedTotal = Math.max(0, Number((subtotalAmount - discountAmt + packingAmt + taxAmt).toFixed(2)));
+
     const parsedAdvance = parseFloat(String(advanceAmount).replace(/,/g, '')) || 0;
     const performaDate = date || new Date().toISOString().split('T')[0];
+
+    // Derive unique companies from product items (excluding 'General')
+    const uniqueCompanies = Array.from(
+      new Set(
+        sanitizedProducts
+          .map((p) => p.productSnapshot?.companyName?.trim())
+          .filter((c): c is string => typeof c === 'string' && c.length > 0 && c.toLowerCase() !== 'general')
+      )
+    );
+    const combinedCompanyName =
+      uniqueCompanies.length > 0
+        ? uniqueCompanies.join(', ')
+        : (req.body.companyName && req.body.companyName.toLowerCase() !== 'general'
+            ? req.body.companyName
+            : customerSnapshot.companyName && customerSnapshot.companyName.toLowerCase() !== 'general'
+            ? customerSnapshot.companyName
+            : req.body.companyName || customerSnapshot.companyName || '');
 
     const performa = await Performa.create({
       performaNumber: finalPerformaNumber,
       customerId: validCustomerId,
-      companyName:
-        req.body.companyName ||
-        customerSnapshot.companyName ||
-        sanitizedProducts[0]?.productSnapshot?.companyName ||
-        '',
+      companyName: combinedCompanyName,
       customerSnapshot: {
         name: customerSnapshot.name.trim(),
         phone: customerSnapshot.phone || '',
-        companyName: req.body.companyName || customerSnapshot.companyName || '',
+        companyName: combinedCompanyName || customerSnapshot.companyName || '',
         address: customerSnapshot.address || '',
         gst: customerSnapshot.gst || '',
       },
@@ -315,9 +377,16 @@ export const createPerforma = async (req: Request, res: Response, next: NextFunc
       totalRequiredCases,
       totalUsedCases: 0,
       totalRemainingCases: totalRequiredCases,
-      totalAllocatedAmount: Number(totalAllocatedAmount.toFixed(2)),
+      subtotal: Number(subtotalAmount.toFixed(2)),
+      discount: cleanDisc,
+      discountAmount: discountAmt,
+      packing: cleanPack,
+      packingAmount: packingAmt,
+      tax: cleanTax,
+      taxAmount: taxAmt,
+      totalAllocatedAmount: finalAllocatedTotal,
       totalUsedAmount: 0,
-      totalRemainingAmount: Number(totalAllocatedAmount.toFixed(2)),
+      totalRemainingAmount: finalAllocatedTotal,
       status: 'ACTIVE',
       date: performaDate,
       notes,
@@ -380,11 +449,15 @@ export const updatePerforma = async (req: Request, res: Response, next: NextFunc
       return;
     }
 
-    const { customerSnapshot, companyName, advanceAmount, products, date, notes, status } = req.body;
+    const { customerSnapshot, companyName, advanceAmount, products, date, notes, status, discount, packing, tax } = req.body;
 
     if (companyName !== undefined) {
       existing.companyName = companyName;
     }
+
+    if (discount !== undefined) existing.discount = String(discount);
+    if (packing !== undefined) existing.packing = String(packing);
+    if (tax !== undefined) existing.tax = String(tax);
 
     if (customerSnapshot) {
       existing.customerSnapshot = {
@@ -448,7 +521,7 @@ export const updatePerforma = async (req: Request, res: Response, next: NextFunc
 
     if (products && Array.isArray(products)) {
       let totalReq = 0;
-      let totalAlloc = 0;
+      let totalSub = 0;
 
       existing.products = products.map((item: any) => {
         const reqCases = parseFloat(item.requiredCases) || 0;
@@ -459,7 +532,7 @@ export const updatePerforma = async (req: Request, res: Response, next: NextFunc
         const usedAmt = parseFloat(item.usedAmount) || 0;
 
         totalReq += reqCases;
-        totalAlloc += allocated;
+        totalSub += allocated;
 
         return {
           productId: item.productId,
@@ -483,8 +556,62 @@ export const updatePerforma = async (req: Request, res: Response, next: NextFunc
 
       existing.totalRequiredCases = totalReq;
       existing.totalRemainingCases = Math.max(0, totalReq - existing.totalUsedCases);
-      existing.totalAllocatedAmount = Number(totalAlloc.toFixed(2));
-      existing.totalRemainingAmount = Math.max(0, Number((totalAlloc - existing.totalUsedAmount).toFixed(2)));
+      existing.subtotal = Number(totalSub.toFixed(2));
+    }
+
+    // Recalculate discount, packing, tax, totalAllocatedAmount
+    const subtotalAmt = existing.subtotal !== undefined ? existing.subtotal : (existing.products || []).reduce((s, p) => s + (p.allocatedAmount || 0), 0);
+    const cleanDisc = String(existing.discount || '0').trim();
+    const discNum = parseFloat(cleanDisc) || 0;
+    let discountAmt = 0;
+    if (discNum > 0) {
+      if (cleanDisc.endsWith('%') || discNum <= 100) {
+        discountAmt = (subtotalAmt * discNum) / 100;
+      } else {
+        discountAmt = discNum;
+      }
+    }
+    discountAmt = Number(discountAmt.toFixed(2));
+    const baseAfterDiscount = Math.max(0, subtotalAmt - discountAmt);
+
+    const cleanPack = String(existing.packing || '0').trim();
+    const packNum = parseFloat(cleanPack) || 0;
+    let packingAmt = 0;
+    if (packNum > 0) {
+      if (cleanPack.endsWith('%') || packNum <= 100) {
+        packingAmt = (baseAfterDiscount * packNum) / 100;
+      } else {
+        packingAmt = packNum;
+      }
+    }
+    packingAmt = Number(packingAmt.toFixed(2));
+
+    const cleanTax = String(existing.tax || '0').trim().replace(/[^0-9.]/g, '');
+    const taxAmt = Number((parseFloat(cleanTax) || 0).toFixed(2));
+
+    const finalAlloc = Math.max(0, Number((subtotalAmt - discountAmt + packingAmt + taxAmt).toFixed(2)));
+
+    existing.discountAmount = discountAmt;
+    existing.packingAmount = packingAmt;
+    existing.taxAmount = taxAmt;
+    existing.totalAllocatedAmount = finalAlloc;
+    existing.totalRemainingAmount = Math.max(0, Number((finalAlloc - existing.totalUsedAmount).toFixed(2)));
+
+    // Derive combined company names if products have companies
+    if (existing.products && existing.products.length > 0) {
+      const uniqueCompanies = Array.from(
+        new Set(
+          existing.products
+            .map((p) => p.productSnapshot?.companyName?.trim())
+            .filter((c): c is string => typeof c === 'string' && c.length > 0 && c.toLowerCase() !== 'general')
+        )
+      );
+      if (uniqueCompanies.length > 0) {
+        existing.companyName = uniqueCompanies.join(', ');
+        if (existing.customerSnapshot) {
+          existing.customerSnapshot.companyName = existing.companyName;
+        }
+      }
     }
 
     await existing.save();
