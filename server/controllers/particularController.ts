@@ -3,7 +3,11 @@ import { Particular } from '../models/Particular';
 import { AccountLedger } from '../models/AccountLedger';
 import { escapeRegex, recalculateCustomerBalance } from '../utils/ledgerUtils';
 import { isCloudinaryConfigured, uploadToCloudinary, deleteFromCloudinary } from '../config/cloudinary';
-import { consumeBillAgainstPerforma, reverseBillConsumption } from '../services/performaConsumptionService';
+import {
+  consumeBillAgainstPerforma,
+  reverseBillConsumption,
+  getParticularNetTotal,
+} from '../services/performaConsumptionService';
 
 export const getParticulars = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -101,8 +105,8 @@ export const createParticular = async (req: Request, res: Response, next: NextFu
       products: products || [],
     });
 
-    // Automatically log to Account Ledger
-    const billTotalNum = parseFloat(String(particular.total || particular.amount).replace(/,/g, '')) || 0;
+    // Automatically log to Account Ledger using Net Total
+    const billTotalNum = getParticularNetTotal(particular);
     if (billTotalNum > 0) {
       await AccountLedger.create({
         particularId: String(particular._id),
@@ -119,7 +123,7 @@ export const createParticular = async (req: Request, res: Response, next: NextFu
       await recalculateCustomerBalance(particular.customerName);
     }
 
-    // Automatically trigger Performa allocation consumption
+    // Automatically trigger Performa allocation consumption with Net Total
     const performaConsumption = await consumeBillAgainstPerforma(
       String(particular._id),
       particular.billNo,
@@ -189,8 +193,8 @@ export const updateParticular = async (req: Request, res: Response, next: NextFu
       return;
     }
 
-    // Update AccountLedger entry
-    const billTotalNum = parseFloat(String(updatedParticular.total || updatedParticular.amount || '0').replace(/,/g, '')) || 0;
+    // Update AccountLedger entry with Net Total
+    const billTotalNum = getParticularNetTotal(updatedParticular);
     
     // Find or update AccountLedger
     const ledgerEntry = await AccountLedger.findOne({
@@ -228,7 +232,7 @@ export const updateParticular = async (req: Request, res: Response, next: NextFu
     }
     await recalculateCustomerBalance(updatedParticular.customerName);
 
-    // Reverse old Performa consumption and re-apply for updated items
+    // Reverse old Performa consumption and re-apply for updated items using Net Total
     await reverseBillConsumption(String(id));
     const performaConsumption = await consumeBillAgainstPerforma(
       String(updatedParticular._id),

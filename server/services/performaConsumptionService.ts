@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { Performa, type IPerforma } from '../models/Performa';
 import { PerformaAudit } from '../models/PerformaAudit';
 import { Customer } from '../models/Customer';
+import { Particular } from '../models/Particular';
 import { AccountLedger } from '../models/AccountLedger';
 import { escapeRegex, recalculateCustomerBalance } from '../utils/ledgerUtils';
 
@@ -31,6 +32,72 @@ export interface BillConsumptionResult {
   warnings: string[];
   remainingCustomerAdvance: number;
 }
+
+export const cleanNumber = (val: any): number => {
+  if (val === undefined || val === null || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  const cleaned = String(val).replace(/[^0-9.-]/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+};
+
+/**
+ * Accurately calculate the final Net Total of a Particular bill
+ * Net Total = (Sub Total - Discount) + Packing Charge + Tax
+ * Matches the exact Net Total displayed in the Particulars Details page
+ */
+export const getParticularNetTotal = (p: any): number => {
+  if (!p) return 0;
+
+  // 1. Direct stored total check (from Particulars details / DB)
+  const storedTotal = cleanNumber(p.total);
+
+  // 2. Subtotal calculation
+  const prodSubtotal = (p.products || []).reduce((acc: number, item: any) => {
+    const a = cleanNumber(item.amount);
+    const q = cleanNumber(item.quantity);
+    const r = cleanNumber(item.rate);
+    const u = cleanNumber(item.pktUnit || item.pktPerUnit) || 1;
+    return acc + (a > 0 ? a : q * r * u);
+  }, 0);
+
+  const subtotal = prodSubtotal > 0 ? prodSubtotal : cleanNumber(p.amount);
+
+  // 3. Discount calculation (supports % like 5% or 5, or fixed amount)
+  let discountAmt = 0;
+  const discStr = String(p.discount || '0').trim();
+  const discNum = cleanNumber(discStr);
+  if (discStr.includes('%') || (discNum > 0 && discNum <= 100 && !discStr.includes('.'))) {
+    discountAmt = (subtotal * discNum) / 100;
+  } else {
+    discountAmt = discNum;
+  }
+
+  const baseAfterDisc = Math.max(0, subtotal - discountAmt);
+
+  // 4. Packing charge calculation (supports % like 5% or 5, or fixed amount)
+  let packingAmt = 0;
+  const packStr = String(p.packing || '0').trim();
+  const packNum = cleanNumber(packStr);
+  if (packStr.includes('%') || (packNum > 0 && packNum <= 100 && !packStr.includes('.'))) {
+    packingAmt = (baseAfterDisc * packNum) / 100;
+  } else {
+    packingAmt = packNum;
+  }
+
+  // 5. Tax calculation (fixed amount or percentage)
+  const taxAmt = cleanNumber(p.tax);
+
+  // 6. Net Total formula: (Sub Total - Discount) + Packing + Tax
+  const calculatedNet = Math.max(0, subtotal - discountAmt + packingAmt + taxAmt);
+
+  // If stored total is present and positive, use it as the source of truth
+  if (storedTotal > 0) {
+    return Number(storedTotal.toFixed(2));
+  }
+
+  return Number(calculatedNet.toFixed(2));
+};
 
 /**
  * Find customer's single master Performa
@@ -209,20 +276,29 @@ export const consumeBillAgainstPerforma = async (
       return result;
     }
 
-    // Calculate total product subtotal vs final bill net total (inclusive of Tax, Packing, Discount)
+    // Try fetching the actual Particular document to guarantee exact Net Total calculation
+    let actualParticular: any = null;
+    if (particularId && mongoose.Types.ObjectId.isValid(particularId)) {
+      actualParticular = await Particular.findById(particularId).lean();
+    }
+
+    // Calculate total product subtotal vs final bill Net Total (inclusive of Tax, Packing, Discount)
     const totalBillSubtotal = products.reduce(
-      (acc, p) => acc + (parseFloat(String(p.amount || '0').replace(/,/g, '')) || 0),
+      (acc, p) => acc + (cleanNumber(p.amount) || 0),
       0
     );
-    const billNetTotal = parseFloat(String(billTotal || '0').replace(/,/g, '')) || totalBillSubtotal;
+    const billNetTotal = actualParticular
+      ? getParticularNetTotal(actualParticular)
+      : (cleanNumber(billTotal) || totalBillSubtotal);
+
     const scaleRatio = totalBillSubtotal > 0 && billNetTotal > 0 ? billNetTotal / totalBillSubtotal : 1;
 
     let totalBillAmountConsumed = 0;
 
     for (const billItem of products) {
-      const billedCases = parseFloat(billItem.quantity) || 0;
-      const itemAmount = parseFloat(String(billItem.amount || '0').replace(/,/g, '')) || 0;
-      const itemRate = parseFloat(String(billItem.rate || '0').replace(/,/g, '')) || 0;
+      const billedCases = cleanNumber(billItem.quantity);
+      const itemAmount = cleanNumber(billItem.amount);
+      const itemRate = cleanNumber(billItem.rate);
       const billedNameNormalized = billItem.particular.trim().toLowerCase();
 
       if (billedCases <= 0) continue;
@@ -297,10 +373,14 @@ export const consumeBillAgainstPerforma = async (
       }
     }
 
-    // Deduct the Particular Bill's Net Total (inclusive of Tax, Packing, and Discount) from customer advance
-    const amountToDeduct = result.consumed
-      ? (billNetTotal > 0 ? billNetTotal : totalBillAmountConsumed)
-      : 0;
+    // Always calculate customer's total used advance from all customer Particulars Net Totals
+    const allCustomerBills = await Particular.find({
+      customerName: { $regex: new RegExp(`^${escapedCustomerName}$`, 'i') },
+    }).lean();
+
+    const totalBillsNetTotal = Number(
+      allCustomerBills.reduce((sum, b) => sum + getParticularNetTotal(b), 0).toFixed(2)
+    );
 
     masterPerforma.totalUsedCases = Number(
       masterPerforma.products.reduce((acc, curr) => acc + curr.usedCases, 0).toFixed(2)
@@ -309,12 +389,12 @@ export const consumeBillAgainstPerforma = async (
       0,
       Number((masterPerforma.totalRequiredCases - masterPerforma.totalUsedCases).toFixed(2))
     );
-    masterPerforma.advanceUsedAmount = Number((masterPerforma.advanceUsedAmount + amountToDeduct).toFixed(2));
+    masterPerforma.advanceUsedAmount = totalBillsNetTotal > 0 ? totalBillsNetTotal : Number((masterPerforma.advanceUsedAmount + (result.consumed ? billNetTotal : 0)).toFixed(2));
     masterPerforma.remainingAdvanceAmount = Math.max(
       0,
       Number((masterPerforma.advanceAmount - masterPerforma.advanceUsedAmount).toFixed(2))
     );
-    masterPerforma.totalUsedAmount = Number((masterPerforma.totalUsedAmount + amountToDeduct).toFixed(2));
+    masterPerforma.totalUsedAmount = masterPerforma.advanceUsedAmount;
     masterPerforma.totalRemainingAmount = Math.max(
       0,
       Number((masterPerforma.totalAllocatedAmount - masterPerforma.totalUsedAmount).toFixed(2))
@@ -393,16 +473,25 @@ export const reverseBillConsumption = async (particularId: string): Promise<void
         0,
         Number((performa.totalRequiredCases - performa.totalUsedCases).toFixed(2))
       );
-      performa.advanceUsedAmount = Math.max(0, Number((performa.advanceUsedAmount - auditAmount).toFixed(2)));
-      performa.remainingAdvanceAmount = Math.min(
-        performa.advanceAmount,
+
+      // Re-sum remaining customer bills for advanceUsedAmount
+      const remainingCustBills = await Particular.find({
+        _id: { $ne: new mongoose.Types.ObjectId(particularId) },
+        customerName: { $regex: new RegExp(`^${escapeRegex(performa.customerSnapshot?.name || audit.customerName)}$`, 'i') },
+      }).lean();
+
+      const remBillsNetTotal = Number(
+        remainingCustBills.reduce((sum, b) => sum + getParticularNetTotal(b), 0).toFixed(2)
+      );
+
+      performa.advanceUsedAmount = remBillsNetTotal;
+      performa.remainingAdvanceAmount = Math.max(
+        0,
         Number((performa.advanceAmount - performa.advanceUsedAmount).toFixed(2))
       );
-      performa.totalUsedAmount = Number(
-        performa.products.reduce((acc, curr) => acc + curr.usedAmount, 0).toFixed(2)
-      );
-      performa.totalRemainingAmount = Math.min(
-        performa.totalAllocatedAmount,
+      performa.totalUsedAmount = remBillsNetTotal;
+      performa.totalRemainingAmount = Math.max(
+        0,
         Number((performa.totalAllocatedAmount - performa.totalUsedAmount).toFixed(2))
       );
 
@@ -512,6 +601,21 @@ export const getCustomerPerformaSummary = async (customerIdentifier: string): Pr
 
   const audits = await PerformaAudit.find(auditQuery).sort({ date: 1, createdAt: 1, _id: 1 }).lean();
 
+  // Get all Particular bills for this customer
+  const customerParticulars = await Particular.find({
+    customerName: { $regex: new RegExp(`^${escapeRegex(customerName)}$`, 'i') },
+  }).lean();
+
+  const particularMapById = new Map<string, any>();
+  const particularMapByBillNo = new Map<string, any>();
+  for (const p of customerParticulars) {
+    const net = getParticularNetTotal(p);
+    particularMapById.set(String(p._id), { ...p, netTotal: net });
+    if (p.billNo) {
+      particularMapByBillNo.set(String(p.billNo).trim().toLowerCase(), { ...p, netTotal: net });
+    }
+  }
+
   // Calculate Initial Advance vs Additional Credits
   let initialAdvance = 0;
   let additionalCredits = 0;
@@ -528,30 +632,53 @@ export const getCustomerPerformaSummary = async (customerIdentifier: string): Pr
     if (initialAudit) {
       initialAdvance = Number(initialAudit.amount) || 0;
     } else {
-      // Calculate from difference
       initialAdvance = masterPerforma.advanceAmount || 0;
     }
 
-    // Additional credits from audits or ledger
+    // Additional credits from audits
     for (const a of audits) {
       if (a._id.toString() === initialAudit?._id?.toString()) continue;
 
       if (a.type === 'ADVANCE_RECEIVED' || a.type === 'PERFORMA_ADVANCE') {
         additionalCredits += Number(a.amount) || 0;
-      } else if (a.type === 'PERFORMA_CONSUMED') {
-        totalUsedByBills += Number(a.amount) || 0;
-      } else if (a.type === 'PERFORMA_REVERSED') {
-        totalUsedByBills = Math.max(0, totalUsedByBills - (Number(a.amount) || 0));
       }
     }
+
+    // Calculate Used Amount = SUM of Net Total of all customer's Particulars bills
+    if (customerParticulars.length > 0) {
+      totalUsedByBills = customerParticulars.reduce((sum, p) => sum + getParticularNetTotal(p), 0);
+    } else {
+      totalUsedByBills = masterPerforma.advanceUsedAmount || 0;
+    }
   } else {
-    // No performa, but might have ledger credits
+    // No performa, but calculate from customer Particulars or ledger
+    if (customerParticulars.length > 0) {
+      totalUsedByBills = customerParticulars.reduce((sum, p) => sum + getParticularNetTotal(p), 0);
+    } else {
+      totalUsedByBills = ledgerTotalDebit;
+    }
     additionalCredits = ledgerTotalCredit;
-    totalUsedByBills = ledgerTotalDebit;
   }
 
+  totalUsedByBills = Number(totalUsedByBills.toFixed(2));
   const totalAdvanceReceived = Number((initialAdvance + additionalCredits).toFixed(2));
   const availableAmount = Math.max(0, Number((totalAdvanceReceived - totalUsedByBills).toFixed(2)));
+
+  // Keep Master Performa updated with the source Net Total calculation
+  if (masterPerforma) {
+    let changed = false;
+    if (masterPerforma.advanceUsedAmount !== totalUsedByBills) {
+      masterPerforma.advanceUsedAmount = totalUsedByBills;
+      changed = true;
+    }
+    if (masterPerforma.remainingAdvanceAmount !== availableAmount) {
+      masterPerforma.remainingAdvanceAmount = availableAmount;
+      changed = true;
+    }
+    if (changed) {
+      await masterPerforma.save();
+    }
+  }
 
   // Build Chronological Transaction History with running balance
   const transactionHistory: any[] = [];
@@ -560,19 +687,31 @@ export const getCustomerPerformaSummary = async (customerIdentifier: string): Pr
   for (const a of audits) {
     let typeLabel = 'TRANSACTION';
     let delta = 0;
+    let displayAmount = Number(a.amount) || 0;
 
     if (a.type === 'ADVANCE_RECEIVED' && (a.reference?.includes('Initial Advance') || a.notes?.includes('Initial'))) {
       typeLabel = 'INITIAL ADVANCE';
-      delta = Number(a.amount) || 0;
+      delta = displayAmount;
     } else if (a.type === 'ADVANCE_RECEIVED' || a.type === 'PERFORMA_ADVANCE') {
       typeLabel = 'ADDITIONAL CREDIT';
-      delta = Number(a.amount) || 0;
+      delta = displayAmount;
     } else if (a.type === 'PERFORMA_CONSUMED') {
       typeLabel = 'BILL CONSUMPTION';
-      delta = -(Number(a.amount) || 0);
+      // Use bill's Net Total if linked to Particular
+      const pDoc = (a.particularId && particularMapById.get(String(a.particularId))) ||
+        (a.billNo && particularMapByBillNo.get(String(a.billNo).trim().toLowerCase()));
+      if (pDoc && pDoc.netTotal > 0) {
+        displayAmount = pDoc.netTotal;
+      }
+      delta = -displayAmount;
     } else if (a.type === 'PERFORMA_REVERSED') {
       typeLabel = 'BILL REVERSAL';
-      delta = Number(a.amount) || 0;
+      const pDoc = (a.particularId && particularMapById.get(String(a.particularId))) ||
+        (a.billNo && particularMapByBillNo.get(String(a.billNo).trim().toLowerCase()));
+      if (pDoc && pDoc.netTotal > 0) {
+        displayAmount = pDoc.netTotal;
+      }
+      delta = displayAmount;
     } else if (a.type === 'PERFORMA_CANCELLED') {
       typeLabel = 'CANCELLED';
       delta = 0;
@@ -585,7 +724,7 @@ export const getCustomerPerformaSummary = async (customerIdentifier: string): Pr
       date: a.date,
       type: typeLabel,
       rawType: a.type,
-      amount: Number(a.amount) || 0,
+      amount: displayAmount,
       delta,
       balance: Number(runningBal.toFixed(2)),
       reference: a.reference || a.performaNumber || '',
@@ -653,3 +792,4 @@ export const getCustomerPerformaSummary = async (customerIdentifier: string): Pr
     transactionHistory: transactionHistory.reverse(), // most recent first for UI tables
   };
 };
+

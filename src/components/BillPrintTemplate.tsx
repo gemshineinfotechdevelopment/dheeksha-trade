@@ -49,13 +49,15 @@ export const BillPrintTemplate: React.FC<BillPrintTemplateProps> = ({ bill }) =>
   let discountAmt = 0;
   let discountLabel = 'Discount Amount';
   if (discNum > 0) {
-    if (rawDiscStr.includes('%') || discNum <= 100) {
+    if (rawDiscStr.includes('%') || (discNum <= 100 && !rawDiscStr.includes('.'))) {
       discountAmt = (subtotal * discNum) / 100;
       discountLabel = `Discount Amount (${bill.discount || discNum}${rawDiscStr.includes('%') ? '' : '%'})`;
     } else {
       discountAmt = discNum;
-      discountLabel = `Discount Amount (₹${discNum})`;
+      discountLabel = `Discount Amount (₹${discNum.toLocaleString('en-IN')})`;
     }
+  } else {
+    discountLabel = 'Discount Amount';
   }
 
   // Packing calculation (Calculated from reduced amount after discount)
@@ -63,19 +65,21 @@ export const BillPrintTemplate: React.FC<BillPrintTemplateProps> = ({ bill }) =>
   const cleanPack = rawPackStr.replace(/[^0-9.]/g, '');
   const packNum = parseFloat(cleanPack) || 0;
   let packingAmt = 0;
-  let packingLabel = 'Packing Amount';
+  let packingLabel = 'Packing Charges';
   if (packNum > 0) {
     const baseAfterDiscount = Math.max(0, subtotal - discountAmt);
-    if (rawPackStr.includes('%') || packNum <= 100) {
+    if (rawPackStr.includes('%') || (packNum <= 100 && !rawPackStr.includes('.'))) {
       packingAmt = (baseAfterDiscount * packNum) / 100;
-      packingLabel = `Packing Amount (${bill.packing || packNum}${rawPackStr.includes('%') ? '' : '%'})`;
+      packingLabel = `Packing Charges (${bill.packing || packNum}${rawPackStr.includes('%') ? '' : '%'})`;
     } else {
       packingAmt = packNum;
-      packingLabel = `Packing Amount (₹${packNum})`;
+      packingLabel = `Packing Charges (₹${packNum.toLocaleString('en-IN')})`;
     }
+  } else {
+    packingLabel = 'Packing Charges';
   }
 
-  // Tax calculation (Manual flat amount)
+  // Tax calculation (Flat amount or tax)
   const rawTaxStr = String(bill.tax ?? '').trim();
   const cleanTax = rawTaxStr.replace(/[^0-9.]/g, '');
   const taxNum = parseFloat(cleanTax) || 0;
@@ -84,6 +88,8 @@ export const BillPrintTemplate: React.FC<BillPrintTemplateProps> = ({ bill }) =>
   if (taxNum > 0) {
     taxAmt = taxNum;
     taxLabel = `Tax Amount (₹${taxNum.toLocaleString('en-IN')})`;
+  } else {
+    taxLabel = 'Tax Amount';
   }
 
   // Grand Total calculation
@@ -342,36 +348,30 @@ export const BillPrintTemplate: React.FC<BillPrintTemplateProps> = ({ bill }) =>
                   ₹ {subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </td>
               </tr>
-              {discountAmt > 0 && (
-                <tr>
-                  <td style={{ border: '1px solid #CBD5E1', padding: '6px 10px', fontWeight: 600, color: '#DC2626', backgroundColor: '#F8FAFC' }}>
-                    {discountLabel}
-                  </td>
-                  <td style={{ border: '1px solid #CBD5E1', padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: '#DC2626' }}>
-                    - ₹ {discountAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              )}
-              {packingAmt > 0 && (
-                <tr>
-                  <td style={{ border: '1px solid #CBD5E1', padding: '6px 10px', fontWeight: 600, color: '#334155', backgroundColor: '#F8FAFC' }}>
-                    {packingLabel}
-                  </td>
-                  <td style={{ border: '1px solid #CBD5E1', padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: '#0F172A' }}>
-                    + ₹ {packingAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              )}
-              {taxAmt > 0 && (
-                <tr>
-                  <td style={{ border: '1px solid #CBD5E1', padding: '6px 10px', fontWeight: 600, color: '#334155', backgroundColor: '#F8FAFC' }}>
-                    {taxLabel}
-                  </td>
-                  <td style={{ border: '1px solid #CBD5E1', padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: '#0F172A' }}>
-                    + ₹ {taxAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              )}
+              <tr>
+                <td style={{ border: '1px solid #CBD5E1', padding: '6px 10px', fontWeight: 600, color: discountAmt > 0 ? '#DC2626' : '#334155', backgroundColor: '#F8FAFC' }}>
+                  {discountLabel}
+                </td>
+                <td style={{ border: '1px solid #CBD5E1', padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: discountAmt > 0 ? '#DC2626' : '#64748B' }}>
+                  - ₹ {discountAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+              </tr>
+              <tr>
+                <td style={{ border: '1px solid #CBD5E1', padding: '6px 10px', fontWeight: 600, color: '#334155', backgroundColor: '#F8FAFC' }}>
+                  {packingLabel}
+                </td>
+                <td style={{ border: '1px solid #CBD5E1', padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: packingAmt > 0 ? '#0F172A' : '#64748B' }}>
+                  + ₹ {packingAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+              </tr>
+              <tr>
+                <td style={{ border: '1px solid #CBD5E1', padding: '6px 10px', fontWeight: 600, color: '#334155', backgroundColor: '#F8FAFC' }}>
+                  {taxLabel}
+                </td>
+                <td style={{ border: '1px solid #CBD5E1', padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: taxAmt > 0 ? '#0F172A' : '#64748B' }}>
+                  + ₹ {taxAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+              </tr>
               <tr style={{ backgroundColor: '#0F172A', color: '#FFFFFF', fontWeight: 900 }}>
                 <td style={{ border: '1px solid #0F172A', padding: '8px 10px', fontSize: '13px' }}>
                   NET TOTAL AMOUNT

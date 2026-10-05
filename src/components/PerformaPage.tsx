@@ -622,14 +622,18 @@ export const PerformaPage: FC<PerformaPageProps> = ({
 
   // Open Print Modal for a specific performa record
   const handleOpenPrintModal = (performa: any) => {
+    const totalAvail = performa.totalAvailableAmount !== undefined ? performa.totalAvailableAmount : (performa.advanceAmount || 0);
+    const usedAmt = performa.usedAmount !== undefined ? performa.usedAmount : (performa.advanceUsedAmount || 0);
+    const remAmt = performa.remainingAmount !== undefined ? performa.remainingAmount : (performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : Math.max(0, totalAvail - usedAmt));
+
     const printData: PerformaPrintData = {
       performaNumber: performa.performaNumber,
       companyName: performa.companyName || performa.customerSnapshot?.companyName,
       date: performa.date,
       customerSnapshot: performa.customerSnapshot,
-      advanceAmount: performa.advanceAmount,
-      advanceUsedAmount: performa.advanceUsedAmount,
-      remainingAdvanceAmount: performa.remainingAdvanceAmount,
+      advanceAmount: totalAvail,
+      advanceUsedAmount: usedAmt,
+      remainingAdvanceAmount: remAmt,
       products: (performa.products || []).map((p: any) => ({
         productCode: p.productSnapshot?.productCode || p.productCode,
         productName: p.productSnapshot?.productName || p.productName,

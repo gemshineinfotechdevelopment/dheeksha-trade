@@ -155,6 +155,10 @@ export const shareBillOnWhatsApp = async (bill: BillPrintData, phone?: string) =
     )
     .join('\n');
 
+  const rawDisc = parseFloat(String(bill.discount || '0').replace(/[^0-9.]/g, '')) || 0;
+  const rawPack = parseFloat(String(bill.packing || '0').replace(/[^0-9.]/g, '')) || 0;
+  const rawTax = parseFloat(String(bill.tax || '0').replace(/[^0-9.]/g, '')) || 0;
+
   const text = `*DHEEKSHA TRADE - INVOICE BILL* 🧾
 ----------------------------------------
 *Bill No:* #${bill.billNo}
@@ -167,7 +171,10 @@ ${bill.companyName && bill.companyName !== 'General' ? `*Company:* ${bill.compan
 ${itemsText || '-'}
 ----------------------------------------
 *Subtotal:* ₹${bill.amount || '0.00'}
-${bill.discount && parseFloat(String(bill.discount)) > 0 ? `*Discount:* ${bill.discount}%\n` : ''}${bill.packing && parseFloat(String(bill.packing)) > 0 ? `*Packing:* ${bill.packing}\n` : ''}${bill.tax && parseFloat(String(bill.tax)) > 0 ? `*Tax:* ₹${bill.tax}\n` : ''}*TOTAL AMOUNT:* ₹${bill.total}
+*Discount:* ${rawDisc > 0 ? `${bill.discount}${String(bill.discount).includes('%') ? '' : '%'}` : '0%'}
+*Packing:* ${rawPack > 0 ? `${bill.packing}${String(bill.packing).includes('%') ? '' : '%'}` : '0%'}
+*Tax:* ₹${rawTax > 0 ? rawTax.toLocaleString('en-IN') : '0.00'}
+*NET TOTAL:* ₹${bill.total || '0.00'}
 ----------------------------------------
 _Thank you for your business!_
 *Dheeksha Trade*`;
@@ -324,8 +331,8 @@ ${itemsText || '-'}
 *Total Cases:* ${totalCases}
 *Subtotal:* ₹${subtotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
 ${discountAmt > 0 ? `*Discount:* ${performa.discount ? `${performa.discount}${String(performa.discount).includes('%') ? '' : '%'}` : ''} (-₹${discountAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })})\n` : ''}${packingAmt > 0 ? `*Packing:* ${performa.packing ? `${performa.packing}${String(performa.packing).includes('%') ? '' : '%'}` : ''} (+₹${packingAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })})\n` : ''}${taxAmt > 0 ? `*Tax:* ₹${taxAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` : ''}*TOTAL ALLOCATED VALUE:* ₹${Number(totalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-*Advance Received:* ₹${Number(performa.advanceAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-*Remaining Advance:* ₹${Number(performa.remainingAdvanceAmount ?? performa.advanceAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+*Advance Received:* ₹${Number(performa.advanceAmount || performa.totalAvailableAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}${((performa.advanceUsedAmount || performa.usedAmount) > 0) ? `\n*Advance Consumed:* -₹${Number(performa.advanceUsedAmount || performa.usedAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : ''}
+*Remaining Advance:* ₹${Number(performa.remainingAdvanceAmount ?? performa.remainingAmount ?? Math.max(0, (performa.advanceAmount || performa.totalAvailableAmount || 0) - (performa.advanceUsedAmount || performa.usedAmount || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
 ----------------------------------------
 *Dheeksha Trade*`;
 

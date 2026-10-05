@@ -66,13 +66,15 @@ export const generateBillHtml = (bill: BillPrintData): string => {
   let discountAmt = 0;
   let discountLabel = 'Discount Amount';
   if (discNum > 0) {
-    if (rawDiscStr.includes('%') || discNum <= 100) {
+    if (rawDiscStr.includes('%') || (discNum <= 100 && !rawDiscStr.includes('.'))) {
       discountAmt = (subtotal * discNum) / 100;
       discountLabel = `Discount (${bill.discount || discNum}${rawDiscStr.includes('%') ? '' : '%'})`;
     } else {
       discountAmt = discNum;
       discountLabel = `Discount (₹${discNum.toLocaleString('en-IN')})`;
     }
+  } else {
+    discountLabel = 'Discount Amount';
   }
 
   const baseAfterDiscount = Math.max(0, subtotal - discountAmt);
@@ -84,13 +86,15 @@ export const generateBillHtml = (bill: BillPrintData): string => {
   let packingAmt = 0;
   let packingLabel = 'Packing Charges';
   if (packNum > 0) {
-    if (rawPackStr.includes('%') || packNum <= 100) {
+    if (rawPackStr.includes('%') || (packNum <= 100 && !rawPackStr.includes('.'))) {
       packingAmt = (baseAfterDiscount * packNum) / 100;
       packingLabel = `Packing (${bill.packing || packNum}${rawPackStr.includes('%') ? '' : '%'})`;
     } else {
       packingAmt = packNum;
       packingLabel = `Packing (₹${packNum.toLocaleString('en-IN')})`;
     }
+  } else {
+    packingLabel = 'Packing Charges';
   }
 
   // Tax calculation (Manual flat amount)
@@ -100,7 +104,9 @@ export const generateBillHtml = (bill: BillPrintData): string => {
   let taxLabel = 'Tax Amount';
   if (taxNum > 0) {
     taxAmt = taxNum;
-    taxLabel = `Tax (₹${taxNum.toLocaleString('en-IN')})`;
+    taxLabel = `Tax Amount (₹${taxNum.toLocaleString('en-IN')})`;
+  } else {
+    taxLabel = 'Tax Amount';
   }
 
   // Grand Total calculation
@@ -400,30 +406,18 @@ export const generateBillHtml = (bill: BillPrintData): string => {
               <td class="summary-label-cell">Subtotal / Particular Amount</td>
               <td class="summary-val-cell">₹ ${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>
-            ${
-              discountAmt > 0
-                ? `<tr>
-                    <td class="summary-label-cell" style="color:#DC2626;">${discountLabel}</td>
-                    <td class="summary-val-cell" style="color:#DC2626;">- ₹ ${discountAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  </tr>`
-                : ''
-            }
-            ${
-              packingAmt > 0
-                ? `<tr>
-                    <td class="summary-label-cell">${packingLabel}</td>
-                    <td class="summary-val-cell">+ ₹ ${packingAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  </tr>`
-                : ''
-            }
-            ${
-              taxAmt > 0
-                ? `<tr>
-                    <td class="summary-label-cell">${taxLabel}</td>
-                    <td class="summary-val-cell">+ ₹ ${taxAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  </tr>`
-                : ''
-            }
+            <tr>
+              <td class="summary-label-cell" style="color: ${discountAmt > 0 ? '#DC2626' : '#334155'};">${discountLabel}</td>
+              <td class="summary-val-cell" style="color: ${discountAmt > 0 ? '#DC2626' : '#64748B'};">- ₹ ${discountAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            </tr>
+            <tr>
+              <td class="summary-label-cell">${packingLabel}</td>
+              <td class="summary-val-cell" style="color: ${packingAmt > 0 ? '#0F172A' : '#64748B'};">+ ₹ ${packingAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            </tr>
+            <tr>
+              <td class="summary-label-cell">${taxLabel}</td>
+              <td class="summary-val-cell" style="color: ${taxAmt > 0 ? '#0F172A' : '#64748B'};">+ ₹ ${taxAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            </tr>
             <tr class="summary-total-row">
               <td>NET TOTAL AMOUNT</td>
               <td class="summary-val-cell">₹ ${formattedTotal}</td>
@@ -1414,14 +1408,14 @@ export const generatePerformaHtml = (performa: any): string => {
             </div>
             <div style="height: 1px; background: #CBD5E1; margin: 6px 0;"></div>
             <div class="summary-row" style="color: #0B4DB7;">
-              <span style="font-weight: 700;">Customer Advance:</span><strong style="font-weight: 800;">₹ ${formatCurrency(performa.advanceAmount || 0)}</strong>
+              <span style="font-weight: 700;">Customer Advance:</span><strong style="font-weight: 800;">₹ ${formatCurrency(performa.advanceAmount || performa.totalAvailableAmount || 0)}</strong>
             </div>
-            ${performa.advanceUsedAmount ? `
+            ${(performa.advanceUsedAmount !== undefined && performa.advanceUsedAmount > 0) ? `
             <div class="summary-row" style="color: #DC2626;">
               <span>Advance Consumed:</span><strong style="font-weight: 700;">- ₹ ${formatCurrency(performa.advanceUsedAmount)}</strong>
             </div>` : ''}
             <div class="summary-row" style="padding-top: 6px; border-top: 2px solid #0B4DB7; margin-top: 4px; font-size: 13px; color: #166534;">
-              <span style="font-weight: 800;">Remaining Advance:</span><strong style="font-weight: 900;">₹ ${formatCurrency(performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : performa.advanceAmount)}</strong>
+              <span style="font-weight: 800;">Remaining Advance:</span><strong style="font-weight: 900;">₹ ${formatCurrency(performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : Math.max(0, (performa.advanceAmount || performa.totalAvailableAmount || 0) - (performa.advanceUsedAmount || 0)))}</strong>
             </div>
           </div>
         </div>

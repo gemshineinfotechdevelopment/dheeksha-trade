@@ -3,12 +3,14 @@ import mongoose from 'mongoose';
 import { Performa, type IPerformaProductItem } from '../models/Performa';
 import { PerformaAudit } from '../models/PerformaAudit';
 import { Customer } from '../models/Customer';
+import { Particular } from '../models/Particular';
 import { AccountLedger } from '../models/AccountLedger';
 import { escapeRegex, recalculateCustomerBalance } from '../utils/ledgerUtils';
 import {
   getCustomerPerformaSummary,
   getCustomerMasterPerforma,
   addCustomerCreditToMasterPerforma,
+  getParticularNetTotal,
 } from '../services/performaConsumptionService';
 
 export const getPerformas = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -78,14 +80,43 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
 
     const performas = await Performa.find(filter).sort(sortObj).lean();
 
-    // Fetch all audits to calculate initial advance, additional credits, and consumed amounts per performa
+    // Fetch all audits and particulars to calculate exact initial advance, additional credits, and consumed Net Totals per performa
     const allAudits = await PerformaAudit.find({}).lean();
-    const auditMap = new Map<string, { initialAdvance: number; additionalCredits: number; consumedAmount: number }>();
+    const allParticulars = await Particular.find({}).lean();
+
+    // Map particulars by ID, billNo, and customerName
+    const particularById = new Map<string, any>();
+    const particularByBillNo = new Map<string, any>();
+    const particularsByCustomer = new Map<string, any[]>();
+
+    for (const p of allParticulars) {
+      const net = getParticularNetTotal(p);
+      const enhanced = { ...p, netTotal: net };
+      particularById.set(String(p._id), enhanced);
+      if (p.billNo) {
+        particularByBillNo.set(String(p.billNo).trim().toLowerCase(), enhanced);
+      }
+      const custKey = (p.customerName || '').trim().toLowerCase();
+      if (!particularsByCustomer.has(custKey)) {
+        particularsByCustomer.set(custKey, []);
+      }
+      particularsByCustomer.get(custKey)!.push(enhanced);
+    }
+
+    const auditMap = new Map<
+      string,
+      { initialAdvance: number; additionalCredits: number; consumedParticularIds: Set<string>; legacyConsumedAmount: number }
+    >();
 
     for (const a of allAudits) {
       const pId = a.performaId ? String(a.performaId) : '';
       if (!pId) continue;
-      const existing = auditMap.get(pId) || { initialAdvance: 0, additionalCredits: 0, consumedAmount: 0 };
+      const existing = auditMap.get(pId) || {
+        initialAdvance: 0,
+        additionalCredits: 0,
+        consumedParticularIds: new Set<string>(),
+        legacyConsumedAmount: 0,
+      };
       const amt = Number(a.amount) || 0;
       if (a.type === 'ADVANCE_RECEIVED') {
         if (a.reference?.includes('Initial Advance') || a.notes?.includes('Initial')) {
@@ -94,9 +125,21 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
           existing.additionalCredits += amt;
         }
       } else if (a.type === 'PERFORMA_CONSUMED') {
-        existing.consumedAmount += amt;
+        if (a.particularId) {
+          existing.consumedParticularIds.add(String(a.particularId));
+        } else if (a.billNo) {
+          existing.consumedParticularIds.add(`bill_${String(a.billNo).trim().toLowerCase()}`);
+        } else {
+          existing.legacyConsumedAmount += amt;
+        }
       } else if (a.type === 'PERFORMA_REVERSED') {
-        existing.consumedAmount = Math.max(0, existing.consumedAmount - amt);
+        if (a.particularId) {
+          existing.consumedParticularIds.delete(String(a.particularId));
+        } else if (a.billNo) {
+          existing.consumedParticularIds.delete(`bill_${String(a.billNo).trim().toLowerCase()}`);
+        } else {
+          existing.legacyConsumedAmount = Math.max(0, existing.legacyConsumedAmount - amt);
+        }
       }
       auditMap.set(pId, existing);
     }
@@ -113,19 +156,45 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
       const auditData = auditMap.get(pId);
       const initialAdvance = auditData?.initialAdvance || p.advanceAmount || 0;
       const additionalCredits = auditData?.additionalCredits || 0;
-      const totalAvailableAmount = Number((p.advanceAmount || 0).toFixed(2));
-      const usedAmount = Number(
-        (p.advanceUsedAmount !== undefined && p.advanceUsedAmount > 0
-          ? p.advanceUsedAmount
-          : auditData?.consumedAmount || 0
-        ).toFixed(2)
-      );
-      const remainingAmount = Number(
-        (p.remainingAdvanceAmount !== undefined
-          ? p.remainingAdvanceAmount
-          : Math.max(0, totalAvailableAmount - usedAmount)
-        ).toFixed(2)
-      );
+      const totalAvailableAmount = Number((initialAdvance + additionalCredits).toFixed(2)) || Number((p.advanceAmount || 0).toFixed(2));
+
+      const custKey = (p.customerSnapshot?.name || '').trim().toLowerCase();
+      const custBills = particularsByCustomer.get(custKey) || [];
+
+      // Calculate Used Amount = SUM of Net Total of all customer's Particulars bills
+      let consumedNetTotal = 0;
+      if (custBills.length > 0) {
+        consumedNetTotal = custBills.reduce((sum, b) => sum + (b.netTotal || 0), 0);
+      } else if (auditData && auditData.consumedParticularIds.size > 0) {
+        for (const pKey of auditData.consumedParticularIds) {
+          if (pKey.startsWith('bill_')) {
+            const billNum = pKey.replace('bill_', '');
+            const partDoc = particularByBillNo.get(billNum);
+            if (partDoc) {
+              consumedNetTotal += partDoc.netTotal;
+            }
+          } else {
+            const partDoc = particularById.get(pKey);
+            if (partDoc) {
+              consumedNetTotal += partDoc.netTotal;
+            }
+          }
+        }
+        consumedNetTotal += auditData.legacyConsumedAmount;
+      } else if (p.advanceUsedAmount !== undefined && p.advanceUsedAmount > 0) {
+        consumedNetTotal = p.advanceUsedAmount;
+      }
+
+      const usedAmount = Number(consumedNetTotal.toFixed(2));
+      const remainingAmount = Number(Math.max(0, totalAvailableAmount - usedAmount).toFixed(2));
+
+      // Sync master performa DB document if out of sync
+      if (p.advanceUsedAmount !== usedAmount || p.remainingAdvanceAmount !== remainingAmount) {
+        Performa.updateOne(
+          { _id: p._id },
+          { advanceUsedAmount: usedAmount, remainingAdvanceAmount: remainingAmount }
+        ).exec().catch(() => {});
+      }
 
       totalAdvance += totalAvailableAmount;
       totalUsedAdvance += usedAmount;
@@ -141,6 +210,8 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
         totalAvailableAmount,
         usedAmount,
         remainingAmount,
+        advanceUsedAmount: usedAmount,
+        remainingAdvanceAmount: remainingAmount,
       };
     });
 
@@ -196,10 +267,23 @@ export const getPerformaById = async (req: Request, res: Response, next: NextFun
       $or: [{ performaId: performa._id }, { customerId: performa.customerId }],
     }).sort({ date: -1, createdAt: -1 });
 
+    const initialAdvance = Number(summary.initialAdvance.toFixed(2)) || performa.advanceAmount || 0;
+    const additionalCredits = Number(summary.additionalCredits.toFixed(2)) || 0;
+    const totalAvailableAmount = Number((initialAdvance + additionalCredits).toFixed(2)) || performa.advanceAmount || 0;
+    const usedAmount = Number(summary.totalUsedByBills.toFixed(2));
+    const remainingAmount = Number(summary.availableAmount.toFixed(2));
+
     res.status(200).json({
       success: true,
       data: {
         ...performa.toObject(),
+        initialAdvance,
+        additionalCredits,
+        totalAvailableAmount,
+        usedAmount,
+        remainingAmount,
+        advanceUsedAmount: usedAmount,
+        remainingAdvanceAmount: remainingAmount,
         financialSummary: summary,
         auditHistory: audits,
         transactionHistory: summary.transactionHistory,

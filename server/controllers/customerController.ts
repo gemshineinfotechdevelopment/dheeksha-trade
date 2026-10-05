@@ -3,7 +3,9 @@ import { Customer } from '../models/Customer';
 import { AccountLedger } from '../models/AccountLedger';
 import { Performa } from '../models/Performa';
 import { PerformaAudit } from '../models/PerformaAudit';
+import { Particular } from '../models/Particular';
 import { escapeRegex } from '../utils/ledgerUtils';
+import { getParticularNetTotal } from '../services/performaConsumptionService';
 
 export const getCustomers = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -39,6 +41,21 @@ export const getCustomers = async (_req: Request, res: Response, next: NextFunct
     const allLedgerEntries = await AccountLedger.find({}).lean();
     const allAudits = await PerformaAudit.find({}).lean();
     const allPerformas = await Performa.find({}).lean();
+    const allParticulars = await Particular.find({}).lean();
+
+    // Map Particulars Net Total by ID, billNo, and customerName
+    const particularById = new Map<string, any>();
+    const particularByBillNo = new Map<string, any>();
+    const particularsByCustomer = new Map<string, any[]>();
+    for (const p of allParticulars) {
+      const net = getParticularNetTotal(p);
+      const enhanced = { ...p, netTotal: net };
+      particularById.set(String(p._id), enhanced);
+      if (p.billNo) particularByBillNo.set(String(p.billNo).trim().toLowerCase(), enhanced);
+      const cKey = (p.customerName || '').trim().toLowerCase();
+      if (!particularsByCustomer.has(cKey)) particularsByCustomer.set(cKey, []);
+      particularsByCustomer.get(cKey)!.push(enhanced);
+    }
 
     // Map Master Performa per customer (by customerId or lowercase name)
     const performaMap = new Map<string, any>();
@@ -84,9 +101,13 @@ export const getCustomers = async (_req: Request, res: Response, next: NextFunct
       if (a.type === 'ADVANCE_RECEIVED' || a.type === 'PERFORMA_ADVANCE') {
         curr.received += amt;
       } else if (a.type === 'PERFORMA_CONSUMED') {
-        curr.used += amt;
+        const pDoc = (a.particularId && particularById.get(String(a.particularId))) ||
+          (a.billNo && particularByBillNo.get(String(a.billNo).trim().toLowerCase()));
+        curr.used += pDoc ? pDoc.netTotal : amt;
       } else if (a.type === 'PERFORMA_REVERSED') {
-        curr.used = Math.max(0, curr.used - amt);
+        const pDoc = (a.particularId && particularById.get(String(a.particularId))) ||
+          (a.billNo && particularByBillNo.get(String(a.billNo).trim().toLowerCase()));
+        curr.used = Math.max(0, curr.used - (pDoc ? pDoc.netTotal : amt));
       }
       advanceMap.set(key, curr);
     }
