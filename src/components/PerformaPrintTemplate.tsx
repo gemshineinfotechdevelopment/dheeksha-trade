@@ -381,7 +381,13 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
             }}
           >
             <span style={{ fontWeight: 700 }}>Customer Advance:</span>
-            <strong style={{ fontWeight: 800 }}>₹ {formatCurrency(performa.advanceAmount)}</strong>
+            <strong style={{ fontWeight: 800 }}>
+              ₹ {formatCurrency(
+                Number(performa.advanceAmount) > 0
+                  ? performa.advanceAmount
+                  : (performa as any).initialAdvance || (performa as any).totalAvailableAmount || 0
+              )}
+            </strong>
           </div>
           {performa.advanceUsedAmount !== undefined && performa.advanceUsedAmount > 0 ? (
             <div

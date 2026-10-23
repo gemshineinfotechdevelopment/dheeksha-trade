@@ -46,7 +46,7 @@ import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import BusinessRoundedIcon from '@mui/icons-material/BusinessRounded';
 import ListAltRoundedIcon from '@mui/icons-material/ListAltRounded';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
-import { CustomersApi, ProductsApi, CompaniesApi, PerformasApi } from '../services/api';
+import { CustomersApi, ProductsApi, CompaniesApi, PerformasApi, AccountsApi } from '../services/api';
 import { PerformaPrintModal } from './PerformaPrintModal';
 import type { PerformaPrintData } from './PerformaPrintTemplate';
 import { sharePerformaOnWhatsApp } from '../utils/whatsappUtils';
@@ -167,6 +167,14 @@ export const PerformaPage: FC<PerformaPageProps> = ({
   const [editProducts, setEditProducts] = useState<EditProductItem[]>([]);
 
 
+
+  // Add Advance Only Modal State
+  const [advanceOnlyModalOpen, setAdvanceOnlyModalOpen] = useState(false);
+  const [advanceOnlyAmount, setAdvanceOnlyAmount] = useState('');
+  const [advanceOnlyDate, setAdvanceOnlyDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [advanceOnlyPaymentMode, setAdvanceOnlyPaymentMode] = useState('Bank');
+  const [advanceOnlyNotes, setAdvanceOnlyNotes] = useState('');
+  const [advanceOnlyLoading, setAdvanceOnlyLoading] = useState(false);
 
   // Print Modal & Toast
   const [printModalOpen, setPrintModalOpen] = useState(false);
@@ -468,6 +476,83 @@ export const PerformaPage: FC<PerformaPageProps> = ({
   const existingAvailableAdvance = useMemo(() => {
     return balanceAmount;
   }, [balanceAmount]);
+
+  // Add Advance Only Handler
+  const handleAddAdvanceOnly = async () => {
+    if (!selectedCustomer) {
+      setToast({ open: true, message: 'Please select a customer first', severity: 'error' });
+      return;
+    }
+    const amt = parseFloat(advanceOnlyAmount.replace(/,/g, ''));
+    if (!amt || amt <= 0) {
+      setToast({ open: true, message: 'Please enter a valid amount greater than 0', severity: 'error' });
+      return;
+    }
+    try {
+      setAdvanceOnlyLoading(true);
+      await AccountsApi.addCredit({
+        customerId: selectedCustomer._id,
+        customerName: selectedCustomer.name,
+        companyName: selectedCustomer.companyName || '',
+        creditAmount: amt.toFixed(2),
+        date: advanceOnlyDate,
+        paymentMode: advanceOnlyPaymentMode,
+        notes: advanceOnlyNotes.trim() || 'Advance payment received',
+      });
+      setToast({ open: true, message: `₹${amt.toLocaleString('en-IN')} advance added for ${selectedCustomer.name}!`, severity: 'success' });
+      setAdvanceOnlyModalOpen(false);
+      setAdvanceOnlyAmount('');
+      setAdvanceOnlyNotes('');
+      // Refresh customer summary
+      fetchCustomerPerformaData(selectedCustomer);
+    } catch (err: any) {
+      setToast({ open: true, message: err?.message || 'Failed to add advance', severity: 'error' });
+    } finally {
+      setAdvanceOnlyLoading(false);
+    }
+  };
+
+  // Direct deposit from the "Deposit New Advance" input field (no products required)
+  const handleDepositAdvanceOnlyFromInput = async () => {
+    if (!selectedCustomer) {
+      setToast({ open: true, message: 'Please select a customer first', severity: 'error' });
+      return;
+    }
+    const amt = parseFloat(String(depositAdvance).replace(/,/g, ''));
+    if (!amt || amt <= 0) {
+      // If amount not entered in input, open modal so user can enter it
+      setAdvanceOnlyAmount('');
+      setAdvanceOnlyDate(date || new Date().toISOString().split('T')[0]);
+      setAdvanceOnlyPaymentMode('Bank');
+      setAdvanceOnlyNotes('');
+      setAdvanceOnlyModalOpen(true);
+      return;
+    }
+    try {
+      setAdvanceOnlyLoading(true);
+      await AccountsApi.addCredit({
+        customerId: selectedCustomer._id,
+        customerName: selectedCustomer.name,
+        companyName: selectedCustomer.companyName || '',
+        creditAmount: amt.toFixed(2),
+        date: date || new Date().toISOString().split('T')[0],
+        paymentMode: 'Bank',
+        notes: notes.trim() || 'Advance deposit received',
+      });
+      setToast({
+        open: true,
+        message: `₹${amt.toLocaleString('en-IN')} advance credited successfully for ${selectedCustomer.name}!`,
+        severity: 'success',
+      });
+      setDepositAdvance('0');
+      // Refresh customer summary & ledger
+      fetchCustomerPerformaData(selectedCustomer);
+    } catch (err: any) {
+      setToast({ open: true, message: err?.message || 'Failed to add advance', severity: 'error' });
+    } finally {
+      setAdvanceOnlyLoading(false);
+    }
+  };
 
   // Reset Form
   const handleReset = async () => {
@@ -1001,24 +1086,47 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                 }}
               />
               {selectedCustomer && (
-                <Button
-                  variant="outlined"
-                  onClick={() => setActiveSubTab('Customer Performa List')}
-                  startIcon={<ListAltRoundedIcon />}
-                  sx={{
-                    borderColor: '#0B4DB7',
-                    color: '#0B4DB7',
-                    textTransform: 'none',
-                    fontWeight: 700,
-                    fontSize: '13px',
-                    borderRadius: '8px',
-                    '&:hover': {
-                      backgroundColor: '#EFF6FF',
-                    },
-                  }}
-                >
-                  View Customer's Performas
-                </Button>
+                <>
+                  <Button
+                    variant="contained"
+                    disableElevation
+                    onClick={() => {
+                      setAdvanceOnlyAmount('');
+                      setAdvanceOnlyDate(new Date().toISOString().split('T')[0]);
+                      setAdvanceOnlyPaymentMode('Bank');
+                      setAdvanceOnlyNotes('');
+                      setAdvanceOnlyModalOpen(true);
+                    }}
+                    startIcon={<AccountBalanceWalletRoundedIcon />}
+                    sx={{
+                      backgroundColor: '#16A34A',
+                      color: '#FFFFFF',
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      borderRadius: '8px',
+                      '&:hover': { backgroundColor: '#15803D' },
+                    }}
+                  >
+                    Add Advance Only
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => setActiveSubTab('Customer Performa List')}
+                    startIcon={<ListAltRoundedIcon />}
+                    sx={{
+                      borderColor: '#0B4DB7',
+                      color: '#0B4DB7',
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      borderRadius: '8px',
+                      '&:hover': { backgroundColor: '#EFF6FF' },
+                    }}
+                  >
+                    View Customer's Performas
+                  </Button>
+                </>
               )}
               {onNavigateAllPerforma && (
                 <Button
@@ -1234,7 +1342,7 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                     onChange={(e) => setDepositAdvance(e.target.value)}
                     type="number"
                     fullWidth
-                    helperText="Optional: Adds new advance payment directly to this customer"
+                    helperText="Enter advance amount. Click 'Add Advance Only' below to credit directly, OR add products & click 'Save & Generate Performa' to combine both."
                   />
                   <TextField
                     label="Performa Date"
@@ -1245,6 +1353,94 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                     sx={{ width: '180px' }}
                     slotProps={{ inputLabel: { shrink: true } }}
                   />
+                </Box>
+
+                {/* Direct Action Button below Deposit New Advance */}
+                <Box
+                  sx={{
+                    mt: 1.5,
+                    p: 1.5,
+                    borderRadius: '8px',
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 1.5,
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <AccountBalanceWalletRoundedIcon sx={{ fontSize: 20, color: '#16A34A' }} />
+                    <Box>
+                      <Typography sx={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>
+                        Advance Only Deposit (Without Products)
+                      </Typography>
+                      <Typography sx={{ fontSize: '11px', color: '#64748B' }}>
+                        If customer gave advance only, credit it directly without adding products to performa.
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      disableElevation
+                      disabled={!selectedCustomer || advanceOnlyLoading}
+                      onClick={handleDepositAdvanceOnlyFromInput}
+                      startIcon={
+                        advanceOnlyLoading ? (
+                          <CircularProgress size={14} sx={{ color: '#FFFFFF' }} />
+                        ) : (
+                          <AccountBalanceWalletRoundedIcon sx={{ fontSize: 16 }} />
+                        )
+                      }
+                      sx={{
+                        backgroundColor: '#16A34A',
+                        color: '#FFFFFF',
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        fontSize: '12.5px',
+                        borderRadius: '8px',
+                        px: 2.2,
+                        py: 0.8,
+                        '&:hover': { backgroundColor: '#15803D' },
+                        '&:disabled': { backgroundColor: '#E2E8F0', color: '#94A3B8' },
+                      }}
+                    >
+                      {advanceOnlyLoading
+                        ? 'Adding...'
+                        : depositAdvance && parseFloat(depositAdvance) > 0
+                        ? `Add Advance Only (₹${parseFloat(depositAdvance).toLocaleString('en-IN')})`
+                        : 'Add Advance Only'}
+                    </Button>
+
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      disabled={!selectedCustomer || advanceOnlyLoading}
+                      onClick={() => {
+                        setAdvanceOnlyAmount(depositAdvance && parseFloat(depositAdvance) > 0 ? depositAdvance : '');
+                        setAdvanceOnlyDate(date || new Date().toISOString().split('T')[0]);
+                        setAdvanceOnlyPaymentMode('Bank');
+                        setAdvanceOnlyNotes('');
+                        setAdvanceOnlyModalOpen(true);
+                      }}
+                      sx={{
+                        borderColor: '#CBD5E1',
+                        color: '#475569',
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        fontSize: '11.5px',
+                        borderRadius: '8px',
+                        py: 0.8,
+                        '&:hover': { backgroundColor: '#F1F5F9', borderColor: '#94A3B8' },
+                      }}
+                    >
+                      More Options...
+                    </Button>
+                  </Box>
                 </Box>
               </Box>
             </Paper>
@@ -1931,6 +2127,152 @@ export const PerformaPage: FC<PerformaPageProps> = ({
           </Paper>
         </Box>
       )}
+
+      {/* Add Advance Only Modal */}
+      <Dialog
+        open={advanceOnlyModalOpen}
+        onClose={() => !advanceOnlyLoading && setAdvanceOnlyModalOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        sx={{ '& .MuiDialog-paper': { borderRadius: '14px' } }}
+      >
+        <DialogTitle
+          sx={{
+            backgroundColor: '#0F172A',
+            color: '#FFFFFF',
+            py: 2,
+            px: 3,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <Box>
+            <Typography sx={{ fontWeight: 800, fontSize: '16px', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <AccountBalanceWalletRoundedIcon sx={{ fontSize: 20, color: '#4ADE80' }} />
+              Add Advance
+            </Typography>
+            <Typography sx={{ fontSize: '12px', color: '#94A3B8', mt: 0.3 }}>
+              {selectedCustomer?.name} — credit without performa products
+            </Typography>
+          </Box>
+          <IconButton onClick={() => setAdvanceOnlyModalOpen(false)} disabled={advanceOnlyLoading} sx={{ color: '#94A3B8', p: 0.5 }}>
+            <CloseRoundedIcon sx={{ fontSize: 20 }} />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent sx={{ pt: 3, pb: 1, px: 3, backgroundColor: '#F8FAFC' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            {/* Amount */}
+            <TextField
+              label="Advance Amount (₹)"
+              placeholder="e.g. 250000"
+              type="number"
+              size="small"
+              fullWidth
+              value={advanceOnlyAmount}
+              onChange={(e) => setAdvanceOnlyAmount(e.target.value)}
+              autoFocus
+              slotProps={{
+                input: {
+                  startAdornment: <InputAdornment position="start"><Typography sx={{ fontWeight: 700, color: '#16A34A' }}>₹</Typography></InputAdornment>,
+                },
+              }}
+              sx={{ '& .MuiOutlinedInput-root': { backgroundColor: '#FFFFFF' } }}
+            />
+
+            {/* Date */}
+            <TextField
+              label="Date"
+              type="date"
+              size="small"
+              fullWidth
+              value={advanceOnlyDate}
+              onChange={(e) => setAdvanceOnlyDate(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ '& .MuiOutlinedInput-root': { backgroundColor: '#FFFFFF' } }}
+            />
+
+            {/* Payment Mode */}
+            <FormControl size="small" fullWidth>
+              <InputLabel>Payment Mode</InputLabel>
+              <Select
+                label="Payment Mode"
+                value={advanceOnlyPaymentMode}
+                onChange={(e) => setAdvanceOnlyPaymentMode(e.target.value)}
+                sx={{ backgroundColor: '#FFFFFF' }}
+              >
+                {['Bank', 'Cash', 'UPI', 'Cheque', 'NEFT', 'RTGS', 'Other'].map((m) => (
+                  <MenuItem key={m} value={m}>{m}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {/* Notes */}
+            <TextField
+              label="Notes (Optional)"
+              placeholder="e.g. Initial deposit, season advance..."
+              size="small"
+              fullWidth
+              multiline
+              rows={2}
+              value={advanceOnlyNotes}
+              onChange={(e) => setAdvanceOnlyNotes(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { backgroundColor: '#FFFFFF' } }}
+            />
+
+            {/* Preview */}
+            {advanceOnlyAmount && parseFloat(advanceOnlyAmount) > 0 && (
+              <Box
+                sx={{
+                  p: 1.5,
+                  borderRadius: '8px',
+                  backgroundColor: '#F0FDF4',
+                  border: '1px solid #BBF7D0',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <Typography sx={{ fontSize: '12.5px', color: '#166534', fontWeight: 600 }}>
+                  Credit for {selectedCustomer?.name}
+                </Typography>
+                <Typography sx={{ fontSize: '16px', fontWeight: 900, color: '#15803D' }}>
+                  ₹{parseFloat(advanceOnlyAmount || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, py: 2, backgroundColor: '#F8FAFC', borderTop: '1px solid #E2E8F0', gap: 1.5 }}>
+          <Button
+            onClick={() => setAdvanceOnlyModalOpen(false)}
+            disabled={advanceOnlyLoading}
+            sx={{ color: '#64748B', textTransform: 'none', fontWeight: 600 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            disableElevation
+            onClick={handleAddAdvanceOnly}
+            disabled={advanceOnlyLoading || !advanceOnlyAmount || parseFloat(advanceOnlyAmount) <= 0}
+            startIcon={advanceOnlyLoading ? <CircularProgress size={16} sx={{ color: '#FFFFFF' }} /> : <AccountBalanceWalletRoundedIcon />}
+            sx={{
+              backgroundColor: '#16A34A',
+              color: '#FFFFFF',
+              fontWeight: 700,
+              textTransform: 'none',
+              borderRadius: '8px',
+              px: 3,
+              '&:hover': { backgroundColor: '#15803D' },
+            }}
+          >
+            {advanceOnlyLoading ? 'Adding...' : 'Add Advance'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* SUB-TAB 2: CUSTOMER PERFORMA LIST */}
       {activeSubTab === 'Customer Performa List' && (

@@ -186,7 +186,10 @@ export const addCustomerCreditToMasterPerforma = async (params: {
   const masterPerforma = await getCustomerMasterPerforma(validCustomerId || finalCustomerName);
 
   if (masterPerforma) {
-    masterPerforma.advanceAmount = Number((masterPerforma.advanceAmount + parsedCredit).toFixed(2));
+    // NOTE: Do NOT add parsedCredit to advanceAmount — that field represents the original
+    // performa booking advance and must remain immutable. Adding credits to it causes
+    // performa prints to show inflated "Customer Advance" values.
+    // Only update remainingAdvanceAmount to reflect the new available balance.
     masterPerforma.remainingAdvanceAmount = Number(
       (masterPerforma.remainingAdvanceAmount + parsedCredit).toFixed(2)
     );
@@ -623,25 +626,21 @@ export const getCustomerPerformaSummary = async (customerIdentifier: string): Pr
 
   // If master performa exists, find the initial advance audit or performa's initial advance
   if (masterPerforma) {
-    const initialAudit = audits.find(
-      (a) =>
-        a.type === 'ADVANCE_RECEIVED' &&
-        (String(a.performaId) === String(masterPerforma._id) || a.reference?.includes('Initial Advance'))
+    const advanceAudits = audits.filter(
+      (a) => a.type === 'ADVANCE_RECEIVED' || a.type === 'PERFORMA_ADVANCE'
     );
+    const totalAuditCredits = advanceAudits.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
 
-    if (initialAudit) {
-      initialAdvance = Number(initialAudit.amount) || 0;
+    const masterAdv = Number(masterPerforma.advanceAmount) || 0;
+    if (masterAdv > 0) {
+      initialAdvance = masterAdv;
+      additionalCredits = Math.max(0, Number((totalAuditCredits - masterAdv).toFixed(2)));
+    } else if (advanceAudits.length > 0) {
+      initialAdvance = Number(advanceAudits[0].amount) || 0;
+      additionalCredits = Math.max(0, Number((totalAuditCredits - initialAdvance).toFixed(2)));
     } else {
-      initialAdvance = masterPerforma.advanceAmount || 0;
-    }
-
-    // Additional credits from audits
-    for (const a of audits) {
-      if (a._id.toString() === initialAudit?._id?.toString()) continue;
-
-      if (a.type === 'ADVANCE_RECEIVED' || a.type === 'PERFORMA_ADVANCE') {
-        additionalCredits += Number(a.amount) || 0;
-      }
+      initialAdvance = 0;
+      additionalCredits = 0;
     }
 
     // Calculate Used Amount = SUM of Net Total of all customer's Particulars bills

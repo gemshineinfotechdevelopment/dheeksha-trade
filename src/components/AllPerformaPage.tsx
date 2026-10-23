@@ -517,13 +517,18 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
 
   // Delete Performa
   const handleDeletePerforma = async (id: string, num: string) => {
-    if (!window.confirm(`Are you sure you want to permanently delete Performa ${num}?`)) return;
+    if (
+      !window.confirm(
+        `Are you sure you want to permanently delete Performa ${num}?\n\nThis will also remove all linked audit and ledger entries.\n\nNote: Performas with active bill consumptions cannot be deleted — cancel or delete the linked bills first.`
+      )
+    )
+      return;
     try {
       await PerformasApi.delete(id);
       setToast({ open: true, message: `Performa ${num} deleted successfully`, severity: 'success' });
       fetchPerformas();
     } catch (err: any) {
-      setToast({ open: true, message: err?.message || 'Failed to delete', severity: 'error' });
+      setToast({ open: true, message: err?.message || 'Failed to delete performa', severity: 'error' });
     }
   };
 
@@ -825,6 +830,8 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
               <MenuItem value="company-desc">Company (Z to A)</MenuItem>
               <MenuItem value="customer-asc">Customer (A to Z)</MenuItem>
               <MenuItem value="customer-desc">Customer (Z to A)</MenuItem>
+              <MenuItem value="value-desc">Performa Value (High to Low)</MenuItem>
+              <MenuItem value="value-asc">Performa Value (Low to High)</MenuItem>
               <MenuItem value="advance-desc">Advance (High to Low)</MenuItem>
               <MenuItem value="advance-asc">Advance (Low to High)</MenuItem>
               <MenuItem value="cases-desc">Total Cases (High to Low)</MenuItem>
@@ -915,6 +922,15 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                   </TableSortLabel>
                 </TableCell>
                 <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>
+                  <TableSortLabel
+                    active={sortBy === 'value'}
+                    direction={sortBy === 'value' ? sortOrder : 'desc'}
+                    onClick={() => handleSortRequest('value')}
+                  >
+                    Performa Value
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>
                   Initial Advance
                 </TableCell>
                 <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>
@@ -930,7 +946,7 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                   </TableSortLabel>
                 </TableCell>
                 <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Used Amount</TableCell>
-                <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Remaining Amount</TableCell>
+                <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Remaining Advance</TableCell>
                 <TableCell sx={{ fontWeight: 800, textAlign: 'center', color: '#475569' }}>
                   <TableSortLabel
                     active={sortBy === 'cases'}
@@ -947,23 +963,24 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={11} sx={{ textAlign: 'center', py: 6 }}>
+                  <TableCell colSpan={12} sx={{ textAlign: 'center', py: 6 }}>
                     <CircularProgress size={30} sx={{ color: '#0B4DB7' }} />
                   </TableCell>
                 </TableRow>
               ) : performas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} sx={{ textAlign: 'center', py: 6, color: '#94A3B8' }}>
+                  <TableCell colSpan={12} sx={{ textAlign: 'center', py: 6, color: '#94A3B8' }}>
                     No Performa records found matching the current filters.
                   </TableCell>
                 </TableRow>
               ) : (
                 performas.map((p) => {
+                  const performaVal = p.totalAllocatedAmount !== undefined ? p.totalAllocatedAmount : (p.performaTotalValue || 0);
                   const initAdv = p.initialAdvance !== undefined ? p.initialAdvance : p.advanceAmount || 0;
                   const addlCred = p.additionalCredits !== undefined ? p.additionalCredits : 0;
                   const totalAvail = p.totalAvailableAmount !== undefined ? p.totalAvailableAmount : p.advanceAmount || 0;
-                  const usedAmt = p.usedAmount !== undefined ? p.usedAmount : p.advanceUsedAmount || 0;
-                  const remAmt = p.remainingAmount !== undefined ? p.remainingAmount : p.remainingAdvanceAmount || 0;
+                  const usedAmt = p.usedAmount !== undefined ? p.usedAmount : (p.advanceUsedAmount || 0);
+                  const remAmt = p.remainingAmount !== undefined ? p.remainingAmount : (totalAvail - performaVal);
 
                   return (
                     <TableRow key={p._id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
@@ -983,6 +1000,9 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                           </Typography>
                         )}
                       </TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: '#0B4DB7' }}>
+                        ₹{performaVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </TableCell>
                       <TableCell sx={{ textAlign: 'right', fontWeight: 700, color: '#0F172A' }}>
                         ₹{initAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </TableCell>
@@ -995,7 +1015,7 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                       <TableCell sx={{ textAlign: 'right', color: usedAmt > 0 ? '#DC2626' : '#64748B', fontWeight: 600 }}>
                         ₹{usedAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </TableCell>
-                      <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: '#166534' }}>
+                      <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: remAmt >= 0 ? '#166534' : '#DC2626' }}>
                         ₹{remAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell sx={{ textAlign: 'center' }}>
@@ -1072,13 +1092,11 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                             </Tooltip>
                           )}
 
-                          {p.totalUsedCases === 0 && p.advanceUsedAmount === 0 && (
-                            <Tooltip title="Delete">
-                              <IconButton size="small" onClick={() => handleDeletePerforma(p._id, p.performaNumber)} sx={{ color: '#DC2626' }}>
-                                <DeleteOutlineRoundedIcon sx={{ fontSize: 18 }} />
-                              </IconButton>
-                            </Tooltip>
-                          )}
+                          <Tooltip title="Delete Performa">
+                            <IconButton size="small" onClick={() => handleDeletePerforma(p._id, p.performaNumber)} sx={{ color: '#DC2626', '&:hover': { backgroundColor: '#FEE2E2' } }}>
+                              <DeleteOutlineRoundedIcon sx={{ fontSize: 18 }} />
+                            </IconButton>
+                          </Tooltip>
                         </Box>
                       </TableCell>
                     </TableRow>
