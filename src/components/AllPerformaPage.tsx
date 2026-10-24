@@ -519,7 +519,7 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
   const handleDeletePerforma = async (id: string, num: string) => {
     if (
       !window.confirm(
-        `Are you sure you want to permanently delete Performa ${num}?\n\nThis will also remove all linked audit and ledger entries.\n\nNote: Performas with active bill consumptions cannot be deleted — cancel or delete the linked bills first.`
+        `Are you sure you want to permanently delete Performa ${num}?\n\nThis will also remove all linked audit and ledger entries.`
       )
     )
       return;

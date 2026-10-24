@@ -824,19 +824,20 @@ export const deletePerforma = async (req: Request, res: Response, next: NextFunc
       return;
     }
 
-    if (performa.totalUsedCases > 0 || performa.advanceUsedAmount > 0) {
-      res.status(400).json({
-        success: false,
-        error: 'Cannot delete Performa with active consumptions. Please cancel instead or delete linked bills first.',
-      });
-      return;
-    }
-
+    // Cascade delete linked audits and ledger entries for this performa
     await PerformaAudit.deleteMany({ performaId: performa._id });
-    await AccountLedger.deleteMany({ performaId: String(performa._id) });
+    await AccountLedger.deleteMany({
+      $or: [
+        { performaId: String(performa._id) },
+        { performaNumber: performa.performaNumber },
+        { billNo: performa.performaNumber },
+      ],
+    });
     await Performa.findByIdAndDelete(id);
 
-    await recalculateCustomerBalance(performa.customerSnapshot.name);
+    if (performa.customerSnapshot?.name) {
+      await recalculateCustomerBalance(performa.customerSnapshot.name.trim());
+    }
 
     res.status(200).json({ success: true, message: 'Performa deleted successfully', data: {} });
   } catch (error) {
