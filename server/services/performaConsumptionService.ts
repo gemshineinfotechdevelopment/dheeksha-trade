@@ -647,14 +647,14 @@ export const getCustomerPerformaSummary = async (customerIdentifier: string): Pr
     if (customerParticulars.length > 0) {
       totalUsedByBills = customerParticulars.reduce((sum, p) => sum + getParticularNetTotal(p), 0);
     } else {
-      totalUsedByBills = masterPerforma.advanceUsedAmount || 0;
+      totalUsedByBills = 0;
     }
   } else {
     // No performa, but calculate from customer Particulars or ledger
     if (customerParticulars.length > 0) {
       totalUsedByBills = customerParticulars.reduce((sum, p) => sum + getParticularNetTotal(p), 0);
     } else {
-      totalUsedByBills = ledgerTotalDebit;
+      totalUsedByBills = 0;
     }
     additionalCredits = ledgerTotalCredit;
   }

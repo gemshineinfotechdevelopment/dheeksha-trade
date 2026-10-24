@@ -980,7 +980,7 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                   const addlCred = p.additionalCredits !== undefined ? p.additionalCredits : 0;
                   const totalAvail = p.totalAvailableAmount !== undefined ? p.totalAvailableAmount : p.advanceAmount || 0;
                   const usedAmt = p.usedAmount !== undefined ? p.usedAmount : (p.advanceUsedAmount || 0);
-                  const remAmt = p.remainingAmount !== undefined ? p.remainingAmount : (totalAvail - performaVal);
+                  const remAmt = p.remainingAmount !== undefined ? p.remainingAmount : (p.remainingAdvanceAmount !== undefined ? p.remainingAdvanceAmount : Math.max(0, totalAvail - usedAmt));
 
                   return (
                     <TableRow key={p._id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>

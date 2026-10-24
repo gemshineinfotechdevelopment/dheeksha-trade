@@ -208,21 +208,18 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
             }
           }
         }
-        consumedNetTotal += auditData.legacyConsumedAmount;
-      } else if (p.advanceUsedAmount !== undefined && p.advanceUsedAmount > 0) {
-        consumedNetTotal = p.advanceUsedAmount;
       }
 
       const performaTotalValue = Number((p.totalAllocatedAmount || 0).toFixed(2));
-      const effectiveUsed = consumedNetTotal > 0 ? consumedNetTotal : performaTotalValue;
-      const usedAmount = Number(effectiveUsed.toFixed(2));
-      const remainingAmount = Number((totalAvailableAmount - effectiveUsed).toFixed(2));
+      const usedAmount = Number(consumedNetTotal.toFixed(2));
+      const remainingAmount = Number((totalAvailableAmount - usedAmount).toFixed(2));
+      const dbRemainingAdvance = Math.max(0, remainingAmount);
 
       // Sync master performa DB document if out of sync
-      if (p.advanceUsedAmount !== usedAmount || p.remainingAdvanceAmount !== remainingAmount) {
+      if (p.advanceUsedAmount !== usedAmount || p.remainingAdvanceAmount !== dbRemainingAdvance) {
         Performa.updateOne(
           { _id: p._id },
-          { advanceUsedAmount: usedAmount, remainingAdvanceAmount: remainingAmount }
+          { advanceUsedAmount: usedAmount, remainingAdvanceAmount: dbRemainingAdvance }
         ).exec().catch(() => {});
       }
 
