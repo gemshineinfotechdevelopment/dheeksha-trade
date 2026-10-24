@@ -513,7 +513,7 @@ export const createPerforma = async (req: Request, res: Response, next: NextFunc
     const unlinkedAudits = await PerformaAudit.find({
       customerName: { $regex: new RegExp(`^${escapeRegex(custTrim)}$`, 'i') },
       type: 'ADVANCE_RECEIVED',
-      $or: [{ performaId: { $exists: false } }, { performaId: null }, { performaId: '' }],
+      $or: [{ performaId: { $exists: false } }, { performaId: null }],
     });
     const unlinkedAdvanceTotal = unlinkedAudits.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
 

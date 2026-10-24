@@ -32,11 +32,25 @@ const PerformaAuditSchema: Schema = new Schema(
   {
     customerId: { type: Schema.Types.ObjectId, ref: 'Customer', required: true, index: true },
     customerName: { type: String, required: true, trim: true },
-    performaId: { type: Schema.Types.ObjectId, ref: 'Performa', index: true },
+    performaId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Performa',
+      index: true,
+      set: (v: any) => (!v || v === '' ? null : v),
+    },
     performaNumber: { type: String, trim: true },
-    particularId: { type: Schema.Types.ObjectId, ref: 'Particular', index: true },
+    particularId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Particular',
+      index: true,
+      set: (v: any) => (!v || v === '' ? null : v),
+    },
     billNo: { type: String, trim: true },
-    productId: { type: Schema.Types.ObjectId, ref: 'Product' },
+    productId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Product',
+      set: (v: any) => (!v || v === '' ? null : v),
+    },
     productName: { type: String, trim: true },
     cases: { type: Number, default: 0 },
     amount: { type: Number, required: true, default: 0 },
