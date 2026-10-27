@@ -2075,10 +2075,32 @@ export const PerformaPage: FC<PerformaPageProps> = ({
 
                   <Box>
                     <Typography sx={{ fontSize: '11px', color: '#0B4DB7', fontWeight: 800, textTransform: 'uppercase' }}>
-                      Total Allocated Value
+                      Performa Total
                     </Typography>
-                    <Typography sx={{ fontSize: '20px', fontWeight: 900, color: '#0B4DB7' }}>
+                    <Typography sx={{ fontSize: '18px', fontWeight: 900, color: '#0B4DB7' }}>
                       ₹{finalTotalAllocatedValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ height: '28px', width: '1px', backgroundColor: '#CBD5E1', display: { xs: 'none', sm: 'block' } }} />
+
+                  <Box>
+                    <Typography sx={{ fontSize: '11px', color: '#166534', fontWeight: 800, textTransform: 'uppercase' }}>
+                      Advance Amount
+                    </Typography>
+                    <Typography sx={{ fontSize: '18px', fontWeight: 900, color: '#166534' }}>
+                      - ₹{currentEnteredAdvance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ height: '28px', width: '1px', backgroundColor: '#CBD5E1', display: { xs: 'none', sm: 'block' } }} />
+
+                  <Box>
+                    <Typography sx={{ fontSize: '11px', color: (finalTotalAllocatedValue - currentEnteredAdvance) > 0 ? '#DC2626' : '#15803D', fontWeight: 800, textTransform: 'uppercase' }}>
+                      {(finalTotalAllocatedValue - currentEnteredAdvance) >= 0 ? 'Remaining to Pay' : 'Excess Advance'}
+                    </Typography>
+                    <Typography sx={{ fontSize: '20px', fontWeight: 900, color: (finalTotalAllocatedValue - currentEnteredAdvance) > 0 ? '#DC2626' : '#15803D' }}>
+                      ₹{Math.abs(finalTotalAllocatedValue - currentEnteredAdvance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </Typography>
                   </Box>
                 </Box>
@@ -2484,7 +2506,8 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                     <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Company / Brand</TableCell>
                     <TableCell sx={{ fontWeight: 800, textAlign: 'center', color: '#475569' }}>Total Cases</TableCell>
                     <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Total Amount</TableCell>
-                    <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Advance Amount</TableCell>
+                    <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Total Advance</TableCell>
+                    <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Balance to Pay</TableCell>
                     <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Notes</TableCell>
                     <TableCell sx={{ fontWeight: 800, textAlign: 'center', color: '#475569' }}>Actions</TableCell>
                   </TableRow>
@@ -2492,19 +2515,19 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                 <TableBody>
                   {customerPerformasLoading ? (
                     <TableRow>
-                      <TableCell colSpan={9} sx={{ textAlign: 'center', py: 6 }}>
+                      <TableCell colSpan={10} sx={{ textAlign: 'center', py: 6 }}>
                         <CircularProgress size={30} sx={{ color: '#0B4DB7' }} />
                       </TableCell>
                     </TableRow>
                   ) : !selectedCustomer ? (
                     <TableRow>
-                      <TableCell colSpan={9} sx={{ textAlign: 'center', py: 6, color: '#94A3B8' }}>
+                      <TableCell colSpan={10} sx={{ textAlign: 'center', py: 6, color: '#94A3B8' }}>
                         Please select a customer above to view their performa records.
                       </TableCell>
                     </TableRow>
                   ) : customerPerformas.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} sx={{ textAlign: 'center', py: 6 }}>
+                      <TableCell colSpan={10} sx={{ textAlign: 'center', py: 6 }}>
                         <Typography sx={{ color: '#64748B', fontWeight: 600, mb: 1 }}>
                           No performas found for {selectedCustomer.name}.
                         </Typography>
@@ -2528,6 +2551,8 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                     customerPerformas.map((p, idx) => {
                       const compDisplay =
                         p.companyName || p.customerSnapshot?.companyName || (p.products?.[0]?.productSnapshot?.companyName) || 'General';
+                      const advReceived = p.totalAdvanceReceived ?? ((p.advanceAmount || 0) + (p.additionalCredits || 0));
+                      const balanceToPay = Math.max(0, (p.totalAllocatedAmount || 0) - advReceived);
                       return (
                         <TableRow key={p._id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
                           <TableCell sx={{ color: '#64748B' }}>{idx + 1}</TableCell>
@@ -2558,7 +2583,10 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                             ₹{(p.totalAllocatedAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: '#166534' }}>
-                            ₹{(p.advanceAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            ₹{advReceived.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: balanceToPay > 0 ? '#DC2626' : '#15803D' }}>
+                            ₹{balanceToPay.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell sx={{ color: '#64748B', fontSize: '12.5px', maxWidth: '180px' }}>
                             {p.notes || '-'}
@@ -2702,16 +2730,49 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                         {selectedPerformaForView.taxAmount ? `+ ₹${selectedPerformaForView.taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (selectedPerformaForView.tax ? `₹${selectedPerformaForView.tax}` : '-')}
                       </strong>
                     </Box>
+
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', gridColumn: 'span 2', pt: 0.8, borderTop: '1px solid #EEF2F6' }}>
-                      <span style={{ color: '#0B4DB7', fontWeight: 800 }}>Total Value:</span>
+                      <span style={{ color: '#0B4DB7', fontWeight: 800 }}>Performa Total Value:</span>
                       <strong style={{ color: '#0B4DB7', fontSize: '14.5px', fontWeight: 900 }}>
                         ₹{(selectedPerformaForView.totalAllocatedAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </strong>
                     </Box>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#64748B' }}>Initial Advance:</span>
+                      <strong>₹{(selectedPerformaForView.initialAdvance ?? selectedPerformaForView.advanceAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#64748B' }}>Additional Credits:</span>
+                      <strong style={{ color: (selectedPerformaForView.additionalCredits || 0) > 0 ? '#0B4DB7' : undefined }}>
+                        + ₹{(selectedPerformaForView.additionalCredits || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </strong>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#1E40AF', fontWeight: 700 }}>Total Advance Received:</span>
+                      <strong style={{ color: '#1E40AF' }}>
+                        ₹{(selectedPerformaForView.totalAdvanceReceived ?? ((selectedPerformaForView.advanceAmount || 0) + (selectedPerformaForView.additionalCredits || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </strong>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#991B1B', fontWeight: 700 }}>Particulars Billed (Used):</span>
+                      <strong style={{ color: '#DC2626' }}>
+                        - ₹{(selectedPerformaForView.advanceUsedAmount ?? selectedPerformaForView.totalUsedAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </strong>
+                    </Box>
+
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', gridColumn: 'span 2', pt: 0.5, borderTop: '1px dashed #EEF2F6' }}>
                       <span style={{ color: '#166534', fontWeight: 700 }}>Available Advance Balance:</span>
                       <strong style={{ color: '#16A34A', fontSize: '14px' }}>
                         ₹{(selectedPerformaForView.remainingAdvanceAmount ?? selectedPerformaForView.financialSummary?.availableAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </strong>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gridColumn: 'span 2', pt: 0.5, borderTop: '1px solid #EEF2F6' }}>
+                      <span style={{ color: '#475569', fontWeight: 800 }}>Performa Balance to Pay:</span>
+                      <strong style={{ color: Math.max(0, (selectedPerformaForView.totalAllocatedAmount || 0) - (selectedPerformaForView.totalAdvanceReceived ?? (selectedPerformaForView.advanceAmount || 0))) > 0 ? '#DC2626' : '#166534', fontSize: '14px', fontWeight: 800 }}>
+                        ₹{Math.max(0, (selectedPerformaForView.totalAllocatedAmount || 0) - (selectedPerformaForView.totalAdvanceReceived ?? (selectedPerformaForView.advanceAmount || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </strong>
                     </Box>
                   </Box>
@@ -2775,6 +2836,41 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                   </TableBody>
                 </Table>
               </TableContainer>
+
+              {/* Linked Particulars Purchase Bills */}
+              {selectedPerformaForView.customerBills && selectedPerformaForView.customerBills.length > 0 && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', mb: 1.5 }}>
+                    Linked Particulars Purchase Bills ({selectedPerformaForView.customerBills.length})
+                  </Typography>
+                  <TableContainer sx={{ border: '1px solid #E2E8F0', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
+                    <Table size="small">
+                      <TableHead sx={{ backgroundColor: '#F1F5F9' }}>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 800 }}>Bill No</TableCell>
+                          <TableCell sx={{ fontWeight: 800 }}>Date</TableCell>
+                          <TableCell sx={{ fontWeight: 800 }}>Company</TableCell>
+                          <TableCell sx={{ fontWeight: 800, textAlign: 'center' }}>Total Cases</TableCell>
+                          <TableCell sx={{ fontWeight: 800, textAlign: 'right' }}>Bill Amount (₹)</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {selectedPerformaForView.customerBills.map((bill: any, idx: number) => (
+                          <TableRow key={idx}>
+                            <TableCell sx={{ fontWeight: 700, color: '#0B4DB7' }}>{bill.billNo || '-'}</TableCell>
+                            <TableCell sx={{ fontSize: '12.5px' }}>{bill.date || '-'}</TableCell>
+                            <TableCell sx={{ fontSize: '12.5px' }}>{bill.companyName || bill.company || '-'}</TableCell>
+                            <TableCell sx={{ textAlign: 'center', fontWeight: 700 }}>{bill.caseCount || bill.cases || 0}</TableCell>
+                            <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: '#0F172A' }}>
+                              ₹{(bill.netTotal || bill.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Box>
+              )}
 
               {/* Performa Transaction History */}
               {selectedPerformaForView.transactionHistory && selectedPerformaForView.transactionHistory.length > 0 && (

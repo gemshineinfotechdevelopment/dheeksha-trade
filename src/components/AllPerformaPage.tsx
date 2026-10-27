@@ -947,6 +947,7 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                 </TableCell>
                 <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Used Amount</TableCell>
                 <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Remaining Advance</TableCell>
+                <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Balance to Pay</TableCell>
                 <TableCell sx={{ fontWeight: 800, textAlign: 'center', color: '#475569' }}>
                   <TableSortLabel
                     active={sortBy === 'cases'}
@@ -963,13 +964,13 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={12} sx={{ textAlign: 'center', py: 6 }}>
+                  <TableCell colSpan={13} sx={{ textAlign: 'center', py: 6 }}>
                     <CircularProgress size={30} sx={{ color: '#0B4DB7' }} />
                   </TableCell>
                 </TableRow>
               ) : performas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} sx={{ textAlign: 'center', py: 6, color: '#94A3B8' }}>
+                  <TableCell colSpan={13} sx={{ textAlign: 'center', py: 6, color: '#94A3B8' }}>
                     No Performa records found matching the current filters.
                   </TableCell>
                 </TableRow>
@@ -981,6 +982,7 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                   const totalAvail = p.totalAvailableAmount !== undefined ? p.totalAvailableAmount : p.advanceAmount || 0;
                   const usedAmt = p.usedAmount !== undefined ? p.usedAmount : (p.advanceUsedAmount || 0);
                   const remAmt = p.remainingAmount !== undefined ? p.remainingAmount : (p.remainingAdvanceAmount !== undefined ? p.remainingAdvanceAmount : Math.max(0, totalAvail - usedAmt));
+                  const balanceToPay = Math.max(0, performaVal - totalAvail);
 
                   return (
                     <TableRow key={p._id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
@@ -1017,6 +1019,9 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                       </TableCell>
                       <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: remAmt >= 0 ? '#166534' : '#DC2626' }}>
                         ₹{remAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: balanceToPay > 0 ? '#DC2626' : '#15803D' }}>
+                        ₹{balanceToPay.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell sx={{ textAlign: 'center' }}>
                         <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
@@ -1186,14 +1191,38 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                     </Box>
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, borderTop: '1px solid #EEF2F6', mb: 0.5 }}>
-                    <span style={{ fontSize: '12.5px', color: '#0B4DB7', fontWeight: 700 }}>Total Value:</span>
-                    <strong style={{ color: '#0B4DB7', fontSize: '13.5px' }}>₹{(selectedPerformaForView.totalAllocatedAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                    <span style={{ fontSize: '12.5px', color: '#0B4DB7', fontWeight: 800 }}>Performa Total Value:</span>
+                    <strong style={{ color: '#0B4DB7', fontSize: '14px', fontWeight: 900 }}>₹{(selectedPerformaForView.totalAllocatedAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                  </Box>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.8, fontSize: '12px', mb: 0.5, pt: 0.5, borderTop: '1px dashed #EEF2F6' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#64748B' }}>Initial Advance:</span>
+                      <strong>₹{(selectedPerformaForView.initialAdvance ?? selectedPerformaForView.advanceAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#64748B' }}>Additional Credits:</span>
+                      <strong style={{ color: (selectedPerformaForView.additionalCredits || 0) > 0 ? '#0B4DB7' : undefined }}>+ ₹{(selectedPerformaForView.additionalCredits || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#1E40AF', fontWeight: 700 }}>Total Advance:</span>
+                      <strong style={{ color: '#1E40AF' }}>₹{(selectedPerformaForView.totalAdvanceReceived ?? ((selectedPerformaForView.advanceAmount || 0) + (selectedPerformaForView.additionalCredits || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#991B1B', fontWeight: 700 }}>Billed (Used):</span>
+                      <strong style={{ color: '#DC2626' }}>- ₹{(selectedPerformaForView.advanceUsedAmount ?? selectedPerformaForView.totalUsedAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5, pt: 0.5, borderTop: '1px dashed #EEF2F6' }}>
+                    <span style={{ fontSize: '12.5px', color: '#166534', fontWeight: 700 }}>Available Advance Balance:</span>
+                    <strong style={{ color: '#16A34A', fontSize: '13.5px' }}>₹{(selectedPerformaForView.remainingAdvanceAmount ?? selectedPerformaForView.financialSummary?.availableAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <span style={{ fontSize: '12.5px', color: '#475569' }}>Advance / Remaining:</span>
-                    <strong style={{ color: '#166534' }}>₹{selectedPerformaForView.advanceAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })} / ₹{selectedPerformaForView.remainingAdvanceAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                    <span style={{ fontSize: '12.5px', color: '#475569', fontWeight: 800 }}>Balance to Pay:</span>
+                    <strong style={{ color: Math.max(0, (selectedPerformaForView.totalAllocatedAmount || 0) - (selectedPerformaForView.totalAdvanceReceived ?? (selectedPerformaForView.advanceAmount || 0))) > 0 ? '#DC2626' : '#166534', fontSize: '13.5px', fontWeight: 800 }}>
+                      ₹{Math.max(0, (selectedPerformaForView.totalAllocatedAmount || 0) - (selectedPerformaForView.totalAdvanceReceived ?? (selectedPerformaForView.advanceAmount || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </strong>
                   </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5, pt: 0.5, borderTop: '1px solid #EEF2F6' }}>
                     <span style={{ fontSize: '12.5px', color: '#475569' }}>Current Status:</span>
                     {getStatusChip(selectedPerformaForView.status)}
                   </Box>
@@ -1237,6 +1266,41 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                   </TableBody>
                 </Table>
               </TableContainer>
+
+              {/* Linked Particulars Purchase Bills */}
+              {selectedPerformaForView.customerBills && selectedPerformaForView.customerBills.length > 0 && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', mb: 1.5 }}>
+                    Linked Particulars Purchase Bills ({selectedPerformaForView.customerBills.length})
+                  </Typography>
+                  <TableContainer sx={{ border: '1px solid #E2E8F0', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
+                    <Table size="small">
+                      <TableHead sx={{ backgroundColor: '#F1F5F9' }}>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 800 }}>Bill No</TableCell>
+                          <TableCell sx={{ fontWeight: 800 }}>Date</TableCell>
+                          <TableCell sx={{ fontWeight: 800 }}>Company</TableCell>
+                          <TableCell sx={{ fontWeight: 800, textAlign: 'center' }}>Total Cases</TableCell>
+                          <TableCell sx={{ fontWeight: 800, textAlign: 'right' }}>Bill Amount (₹)</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {selectedPerformaForView.customerBills.map((bill: any, idx: number) => (
+                          <TableRow key={idx}>
+                            <TableCell sx={{ fontWeight: 700, color: '#0B4DB7' }}>{bill.billNo || '-'}</TableCell>
+                            <TableCell sx={{ fontSize: '12.5px' }}>{bill.date || '-'}</TableCell>
+                            <TableCell sx={{ fontSize: '12.5px' }}>{bill.companyName || bill.company || '-'}</TableCell>
+                            <TableCell sx={{ textAlign: 'center', fontWeight: 700 }}>{bill.caseCount || bill.cases || 0}</TableCell>
+                            <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: '#0F172A' }}>
+                              ₹{(bill.netTotal || bill.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Box>
+              )}
 
               {/* Audit / Consumption History */}
               {selectedPerformaForView.auditHistory && selectedPerformaForView.auditHistory.length > 0 && (

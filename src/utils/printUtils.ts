@@ -1275,6 +1275,21 @@ export const generatePerformaHtml = (performa: any): string => {
 
   const totalAllocatedVal = Math.max(0, subtotalVal - discountAmt + packingAmt + taxAmt);
 
+  const initAdv = performa.initialAdvance !== undefined ? performa.initialAdvance : (Number(performa.advanceAmount) || 0);
+  const addlCred = performa.additionalCredits !== undefined ? performa.additionalCredits : 0;
+  const totalAdvReceived = performa.totalAdvanceReceived !== undefined
+    ? performa.totalAdvanceReceived
+    : (performa.totalAvailableAmount !== undefined ? performa.totalAvailableAmount : (initAdv + addlCred));
+  const usedAmt = performa.usedAmount !== undefined
+    ? performa.usedAmount
+    : (performa.advanceUsedAmount !== undefined ? performa.advanceUsedAmount : 0);
+  const customerAdvBal = performa.balanceAmount !== undefined
+    ? performa.balanceAmount
+    : (performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : (totalAdvReceived - usedAmt));
+  const performaPendingVal = performa.performaRemainingAmount !== undefined
+    ? performa.performaRemainingAmount
+    : Math.max(0, totalAllocatedVal - totalAdvReceived);
+
   const productRowsHtml = (performa.products || []).map((item: any, idx: number) => {
     const isEven = idx % 2 === 1;
     const prodName = item.productSnapshot?.productName || item.productName || item.particular || 'Product';
@@ -1407,18 +1422,60 @@ export const generatePerformaHtml = (performa: any): string => {
               <span style="color:#0F172A; font-weight: 700;">Total Allocated Value:</span><strong style="color:#0B4DB7; font-weight: 800; font-size: 13.5px;">₹ ${formatCurrency(totalAllocatedVal)}</strong>
             </div>
             <div style="height: 1px; background: #CBD5E1; margin: 6px 0;"></div>
-            <div class="summary-row" style="color: #0B4DB7;">
-              <span style="font-weight: 700;">Customer Advance:</span><strong style="font-weight: 800;">₹ ${formatCurrency(performa.advanceAmount || performa.totalAvailableAmount || 0)}</strong>
-            </div>
-            ${(performa.advanceUsedAmount !== undefined && performa.advanceUsedAmount > 0) ? `
-            <div class="summary-row" style="color: #DC2626;">
-              <span>Advance Consumed:</span><strong style="font-weight: 700;">- ₹ ${formatCurrency(performa.advanceUsedAmount)}</strong>
+            ${initAdv > 0 ? `
+            <div class="summary-row" style="color: #475569;">
+              <span>Initial Advance:</span><strong style="font-weight: 600;">₹ ${formatCurrency(initAdv)}</strong>
             </div>` : ''}
-            <div class="summary-row" style="padding-top: 6px; border-top: 2px solid #0B4DB7; margin-top: 4px; font-size: 13px; color: #166534;">
-              <span style="font-weight: 800;">Remaining Advance:</span><strong style="font-weight: 900;">₹ ${formatCurrency(performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : Math.max(0, (performa.advanceAmount || performa.totalAvailableAmount || 0) - (performa.advanceUsedAmount || 0)))}</strong>
+            ${addlCred > 0 ? `
+            <div class="summary-row" style="color: #1E40AF;">
+              <span>Addl Credits / Payments:</span><strong style="font-weight: 600;">+ ₹ ${formatCurrency(addlCred)}</strong>
+            </div>` : ''}
+            <div class="summary-row" style="color: #0B4DB7; padding-top: 3px; border-top: ${(initAdv > 0 && addlCred > 0) ? '1px dashed #CBD5E1' : 'none'};">
+              <span style="font-weight: 700;">Total Advance Received:</span><strong style="font-weight: 800;">₹ ${formatCurrency(totalAdvReceived)}</strong>
+            </div>
+            ${usedAmt > 0 ? `
+            <div class="summary-row" style="color: #DC2626;">
+              <span>Particulars Billed (Used):</span><strong style="font-weight: 700;">- ₹ ${formatCurrency(usedAmt)}</strong>
+            </div>` : ''}
+            <div class="summary-row" style="padding-top: 4px; border-top: 1px dashed #CBD5E1; margin-top: 3px; font-size: 11.5px; color: ${performaPendingVal > 0 ? '#B91C1C' : '#15803D'};">
+              <span style="font-weight: 700;">Performa Balance to Pay:</span><strong style="font-weight: 800;">${performaPendingVal > 0 ? `₹ ${formatCurrency(performaPendingVal)}` : 'NIL (Fully Paid)'}</strong>
+            </div>
+            <div class="summary-row" style="padding-top: 6px; border-top: 2px solid #0B4DB7; margin-top: 4px; font-size: 13px; color: ${customerAdvBal >= 0 ? '#166534' : '#DC2626'};">
+              <span style="font-weight: 800;">${customerAdvBal >= 0 ? 'Available Advance Balance:' : 'Net Pending Debit:'}</span><strong style="font-weight: 900;">₹ ${formatCurrency(Math.abs(customerAdvBal))}</strong>
             </div>
           </div>
         </div>
+
+        ${performa.customerBills && performa.customerBills.length > 0 ? `
+        <div style="margin-top: 14px; margin-bottom: 14px; page-break-inside: avoid;">
+          <div style="font-size: 11px; font-weight: 800; color: #0F172A; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px;">
+            Linked Particulars Purchase Bills (${performa.customerBills.length})
+          </div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #CBD5E1;">
+            <thead>
+              <tr style="background-color: #F1F5F9;">
+                <th style="padding: 4px 6px; text-align: center; border: 1px solid #CBD5E1; width: 30px;">#</th>
+                <th style="padding: 4px 8px; text-align: left; border: 1px solid #CBD5E1;">Bill No</th>
+                <th style="padding: 4px 8px; text-align: left; border: 1px solid #CBD5E1; width: 80px;">Date</th>
+                <th style="padding: 4px 8px; text-align: left; border: 1px solid #CBD5E1;">Company</th>
+                <th style="padding: 4px 6px; text-align: center; border: 1px solid #CBD5E1; width: 50px;">Cases</th>
+                <th style="padding: 4px 8px; text-align: right; border: 1px solid #CBD5E1; width: 90px;">Net Total (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${performa.customerBills.map((b: any, bIdx: number) => `
+                <tr style="background-color: ${bIdx % 2 === 1 ? '#F8FAFC' : '#FFFFFF'};">
+                  <td style="padding: 4px 6px; text-align: center; border: 1px solid #CBD5E1;">${bIdx + 1}</td>
+                  <td style="padding: 4px 8px; font-weight: 700; border: 1px solid #CBD5E1;">#${b.billNo}</td>
+                  <td style="padding: 4px 8px; border: 1px solid #CBD5E1;">${b.date}</td>
+                  <td style="padding: 4px 8px; border: 1px solid #CBD5E1; color: #0B4DB7;">${b.companyName || '-'}</td>
+                  <td style="padding: 4px 6px; text-align: center; border: 1px solid #CBD5E1;">${b.caseCount || '0'}</td>
+                  <td style="padding: 4px 8px; text-align: right; font-weight: 700; border: 1px solid #CBD5E1;">₹ ${formatCurrency(b.netTotal || parseFloat(b.total || b.amount || 0))}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>` : ''}
 
         <!-- Signatures -->
         <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 28px; padding-top: 14px; border-top: 1px dashed #CBD5E1; font-size: 11px; page-break-inside: avoid;">

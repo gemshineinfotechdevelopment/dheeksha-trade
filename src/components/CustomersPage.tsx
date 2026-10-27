@@ -32,6 +32,7 @@ import PrintOutlinedIcon from '@mui/icons-material/PrintOutlined';
 import { CustomersApi, AccountsApi, CompaniesApi } from '../services/api';
 import { printCustomerListDirectly } from '../utils/printUtils';
 import { DateRangePrintModal } from './DateRangePrintModal';
+import { DatePickerField } from './DatePickerField';
 
 export interface Customer {
   _id?: string;
@@ -898,15 +899,10 @@ export const CustomersPage: FC<CustomersPageProps> = ({ onAddNew, onSelectCustom
               <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569', mb: 0.5 }}>
                 Payment Date
               </Typography>
-              <TextField
-                fullWidth
-                size="small"
+              <DatePickerField
                 value={paymentForm.date}
-                onChange={(e) => setPaymentForm({ ...paymentForm, date: e.target.value })}
+                onChange={(val) => setPaymentForm({ ...paymentForm, date: val })}
                 placeholder="DD-MM-YYYY"
-                slotProps={{
-                  input: { sx: { fontSize: '13.5px', fontWeight: 500, borderRadius: '6px' } },
-                }}
               />
             </Box>
           </Box>

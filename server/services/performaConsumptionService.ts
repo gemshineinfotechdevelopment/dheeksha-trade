@@ -186,12 +186,13 @@ export const addCustomerCreditToMasterPerforma = async (params: {
   const masterPerforma = await getCustomerMasterPerforma(validCustomerId || finalCustomerName);
 
   if (masterPerforma) {
-    // NOTE: Do NOT add parsedCredit to advanceAmount — that field represents the original
-    // performa booking advance and must remain immutable. Adding credits to it causes
-    // performa prints to show inflated "Customer Advance" values.
-    // Only update remainingAdvanceAmount to reflect the new available balance.
+    const prevAddl = Number(masterPerforma.additionalCredits) || 0;
+    const initAdv = Number(masterPerforma.advanceAmount) || 0;
+    masterPerforma.additionalCredits = Number((prevAddl + parsedCredit).toFixed(2));
+    masterPerforma.totalAdvanceReceived = Number((initAdv + masterPerforma.additionalCredits).toFixed(2));
+    const usedAmt = Number(masterPerforma.advanceUsedAmount) || 0;
     masterPerforma.remainingAdvanceAmount = Number(
-      (masterPerforma.remainingAdvanceAmount + parsedCredit).toFixed(2)
+      (masterPerforma.totalAdvanceReceived - usedAmt).toFixed(2)
     );
     if (masterPerforma.status === 'COMPLETED' && masterPerforma.totalRemainingCases > 0) {
       masterPerforma.status = 'PARTIALLY_USED';
@@ -385,6 +386,21 @@ export const consumeBillAgainstPerforma = async (
       allCustomerBills.reduce((sum, b) => sum + getParticularNetTotal(b), 0).toFixed(2)
     );
 
+    // Compute all customer credits (initial advance + all Add Credits) from AccountLedger
+    const allCredits = await AccountLedger.find({
+      customerName: { $regex: new RegExp(`^${escapedCustomerName}$`, 'i') },
+      $or: [{ type: 'CREDIT' }, { type: 'ADVANCE' }],
+    }).lean();
+    const totalCreditsAmount = Number(
+      allCredits.reduce((sum, c) => sum + (parseFloat(String(c.credit || '0').replace(/,/g, '')) || 0), 0).toFixed(2)
+    );
+
+    const initAdv = Number(masterPerforma.advanceAmount) || 0;
+    const totalAdvReceived = totalCreditsAmount > 0 ? totalCreditsAmount : Math.max(initAdv, (masterPerforma.totalAdvanceReceived || 0));
+    const additionalCreds = Math.max(0, Number((totalAdvReceived - initAdv).toFixed(2)));
+
+    masterPerforma.additionalCredits = additionalCreds;
+    masterPerforma.totalAdvanceReceived = totalAdvReceived;
     masterPerforma.totalUsedCases = Number(
       masterPerforma.products.reduce((acc, curr) => acc + curr.usedCases, 0).toFixed(2)
     );
@@ -393,9 +409,8 @@ export const consumeBillAgainstPerforma = async (
       Number((masterPerforma.totalRequiredCases - masterPerforma.totalUsedCases).toFixed(2))
     );
     masterPerforma.advanceUsedAmount = totalBillsNetTotal > 0 ? totalBillsNetTotal : Number((masterPerforma.advanceUsedAmount + (result.consumed ? billNetTotal : 0)).toFixed(2));
-    masterPerforma.remainingAdvanceAmount = Math.max(
-      0,
-      Number((masterPerforma.advanceAmount - masterPerforma.advanceUsedAmount).toFixed(2))
+    masterPerforma.remainingAdvanceAmount = Number(
+      (totalAdvReceived - masterPerforma.advanceUsedAmount).toFixed(2)
     );
     masterPerforma.totalUsedAmount = masterPerforma.advanceUsedAmount;
     masterPerforma.totalRemainingAmount = Math.max(
@@ -624,48 +639,55 @@ export const getCustomerPerformaSummary = async (customerIdentifier: string): Pr
   let additionalCredits = 0;
   let totalUsedByBills = 0;
 
-  // If master performa exists, find the initial advance audit or performa's initial advance
-  if (masterPerforma) {
-    const advanceAudits = audits.filter(
-      (a) => a.type === 'ADVANCE_RECEIVED' || a.type === 'PERFORMA_ADVANCE'
-    );
-    const totalAuditCredits = advanceAudits.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
+  // Calculate Used Amount = SUM of Net Total of all customer's Particulars bills
+  if (customerParticulars.length > 0) {
+    totalUsedByBills = customerParticulars.reduce((sum, p) => sum + getParticularNetTotal(p), 0);
+  } else {
+    totalUsedByBills = 0;
+  }
+  totalUsedByBills = Number(totalUsedByBills.toFixed(2));
 
+  // Determine total credits from ledger
+  const advanceAudits = audits.filter(
+    (a) => a.type === 'ADVANCE_RECEIVED' || a.type === 'PERFORMA_ADVANCE'
+  );
+  const totalAuditCredits = advanceAudits.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
+  const effectiveTotalCredits = Math.max(ledgerTotalCredit, totalAuditCredits);
+
+  if (masterPerforma) {
     const masterAdv = Number(masterPerforma.advanceAmount) || 0;
     if (masterAdv > 0) {
       initialAdvance = masterAdv;
-      additionalCredits = Math.max(0, Number((totalAuditCredits - masterAdv).toFixed(2)));
+      additionalCredits = Math.max(0, Number((effectiveTotalCredits - masterAdv).toFixed(2)));
     } else if (advanceAudits.length > 0) {
       initialAdvance = Number(advanceAudits[0].amount) || 0;
-      additionalCredits = Math.max(0, Number((totalAuditCredits - initialAdvance).toFixed(2)));
+      additionalCredits = Math.max(0, Number((effectiveTotalCredits - initialAdvance).toFixed(2)));
     } else {
       initialAdvance = 0;
-      additionalCredits = 0;
-    }
-
-    // Calculate Used Amount = SUM of Net Total of all customer's Particulars bills
-    if (customerParticulars.length > 0) {
-      totalUsedByBills = customerParticulars.reduce((sum, p) => sum + getParticularNetTotal(p), 0);
-    } else {
-      totalUsedByBills = 0;
+      additionalCredits = effectiveTotalCredits;
     }
   } else {
-    // No performa, but calculate from customer Particulars or ledger
-    if (customerParticulars.length > 0) {
-      totalUsedByBills = customerParticulars.reduce((sum, p) => sum + getParticularNetTotal(p), 0);
-    } else {
-      totalUsedByBills = 0;
-    }
-    additionalCredits = ledgerTotalCredit;
+    additionalCredits = effectiveTotalCredits;
   }
 
-  totalUsedByBills = Number(totalUsedByBills.toFixed(2));
   const totalAdvanceReceived = Number((initialAdvance + additionalCredits).toFixed(2));
   const availableAmount = Math.max(0, Number((totalAdvanceReceived - totalUsedByBills).toFixed(2)));
+  const balanceAmount = Number((totalAdvanceReceived - totalUsedByBills).toFixed(2));
+  const customerPendingAmount = balanceAmount < 0 ? Math.abs(balanceAmount) : 0;
+  const performaTotalVal = masterPerforma ? (masterPerforma.totalAllocatedAmount || 0) : 0;
+  const performaRemainingAmount = Math.max(0, Number((performaTotalVal - totalAdvanceReceived).toFixed(2)));
 
-  // Keep Master Performa updated with the source Net Total calculation
+  // Keep Master Performa updated
   if (masterPerforma) {
     let changed = false;
+    if (masterPerforma.additionalCredits !== additionalCredits) {
+      masterPerforma.additionalCredits = additionalCredits;
+      changed = true;
+    }
+    if (masterPerforma.totalAdvanceReceived !== totalAdvanceReceived) {
+      masterPerforma.totalAdvanceReceived = totalAdvanceReceived;
+      changed = true;
+    }
     if (masterPerforma.advanceUsedAmount !== totalUsedByBills) {
       masterPerforma.advanceUsedAmount = totalUsedByBills;
       changed = true;
@@ -782,12 +804,30 @@ export const getCustomerPerformaSummary = async (customerIdentifier: string): Pr
     totalUsedByBills,
     availableAdvance: availableAmount,
     availableAmount,
+    balanceAmount,
+    customerPendingAmount,
+    performaTotalValue: performaTotalVal,
+    performaRemainingAmount,
     totalAllocatedCases: masterPerforma?.totalRequiredCases || 0,
     totalUsedCases: masterPerforma?.totalUsedCases || 0,
     totalRemainingCases: masterPerforma?.totalRemainingCases || 0,
     ledgerTotalCredit: Number(ledgerTotalCredit.toFixed(2)),
     ledgerTotalDebit: Number(ledgerTotalDebit.toFixed(2)),
     ledgerCreditBalance,
+    customerBills: customerParticulars.map((p) => ({
+      _id: String(p._id),
+      billNo: p.billNo,
+      date: p.date,
+      companyName: p.companyName || '-',
+      caseCount: p.caseCount || '0',
+      amount: p.amount,
+      discount: p.discount,
+      packing: p.packing,
+      tax: p.tax,
+      total: p.total,
+      netTotal: getParticularNetTotal(p),
+      products: p.products || [],
+    })),
     transactionHistory: transactionHistory.reverse(), // most recent first for UI tables
   };
 };

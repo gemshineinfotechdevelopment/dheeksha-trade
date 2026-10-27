@@ -24,7 +24,6 @@ import {
   Alert,
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import PrintOutlinedIcon from '@mui/icons-material/PrintOutlined';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import ModeEditOutlineRoundedIcon from '@mui/icons-material/ModeEditOutlineRounded';
@@ -55,6 +54,7 @@ import {
   shareParticularsListOnWhatsApp,
 } from '../utils/whatsappUtils';
 import { DateRangePrintModal } from './DateRangePrintModal';
+import { DatePickerField } from './DatePickerField';
 
 export type ParticularSubTab =
   | 'Select Customer'
@@ -1671,29 +1671,12 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                   <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#475569', mb: 0.5 }}>
                     Date
                   </Typography>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    placeholder="dd-mm-yyyy"
+                  <DatePickerField
                     value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    slotProps={{
-                      input: {
-                        endAdornment: (
-                          <CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: '#1E293B' }} />
-                        ),
-                        sx: {
-                          fontSize: '12.5px',
-                          fontWeight: 500,
-                          height: '36px',
-                          backgroundColor: '#FFFFFF',
-                          borderRadius: '6px',
-                          '& .MuiOutlinedInput-notchedOutline': {
-                            borderColor: '#CBD5E1',
-                          },
-                        },
-                      },
-                    }}
+                    onChange={setDate}
+                    placeholder="dd-mm-yyyy"
+                    iconSize={16}
+                    inputSx={{ height: '36px' }}
                   />
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
@@ -3394,31 +3377,14 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                 >
                   Date
                 </Typography>
-                <TextField
-                  fullWidth
-                  size="small"
-                  placeholder="dd-mm-yyyy"
+                <DatePickerField
                   value={creditDate}
-                  onChange={(e) => setCreditDate(e.target.value)}
-                  slotProps={{
-                    input: {
-                      endAdornment: (
-                        <CalendarTodayOutlinedIcon sx={{ fontSize: 18, color: '#1E293B' }} />
-                      ),
-                      sx: {
-                        fontSize: '13.5px',
-                        fontWeight: 500,
-                        height: '42px',
-                        backgroundColor: '#FFFFFF',
-                        borderRadius: '6px',
-                        '& .MuiOutlinedInput-notchedOutline': {
-                          borderColor: '#CBD5E1',
-                        },
-                        '&:hover .MuiOutlinedInput-notchedOutline': {
-                          borderColor: '#94A3B8',
-                        },
-                      },
-                    },
+                  onChange={setCreditDate}
+                  placeholder="dd-mm-yyyy"
+                  iconSize={18}
+                  inputSx={{
+                    fontSize: '13.5px',
+                    height: '42px',
                   }}
                 />
               </Box>
@@ -3842,14 +3808,12 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
               <Typography sx={{ fontSize: '12.5px', fontWeight: 600, color: '#475569', mb: 0.5 }}>
                 Date (DD-MM-YYYY)
               </Typography>
-              <TextField
-                fullWidth
-                size="small"
+              <DatePickerField
                 value={editBillForm.date}
-                onChange={(e) => setEditBillForm((prev) => ({ ...prev, date: e.target.value }))}
-                slotProps={{
-                  input: { sx: { fontSize: '13px', fontWeight: 600, borderRadius: '6px' } },
-                }}
+                onChange={(val) => setEditBillForm((prev) => ({ ...prev, date: val }))}
+                placeholder="DD-MM-YYYY"
+                iconSize={16}
+                inputSx={{ fontSize: '13px', fontWeight: 600 }}
               />
             </Box>
 

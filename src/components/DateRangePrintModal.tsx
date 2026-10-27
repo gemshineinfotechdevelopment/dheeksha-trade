@@ -258,8 +258,11 @@ export const DateRangePrintModal: FC<DateRangePrintModalProps> = ({
                 setActivePreset('CUSTOM');
               }}
               slotProps={{
+                htmlInput: {
+                  onClick: (e: any) => e.target.showPicker?.(),
+                },
                 input: {
-                  sx: { fontSize: '13.5px', fontWeight: 500, borderRadius: '6px' },
+                  sx: { fontSize: '13.5px', fontWeight: 500, borderRadius: '6px', cursor: 'pointer' },
                 },
               }}
             />
@@ -278,8 +281,11 @@ export const DateRangePrintModal: FC<DateRangePrintModalProps> = ({
                 setActivePreset('CUSTOM');
               }}
               slotProps={{
+                htmlInput: {
+                  onClick: (e: any) => e.target.showPicker?.(),
+                },
                 input: {
-                  sx: { fontSize: '13.5px', fontWeight: 500, borderRadius: '6px' },
+                  sx: { fontSize: '13.5px', fontWeight: 500, borderRadius: '6px', cursor: 'pointer' },
                 },
               }}
             />

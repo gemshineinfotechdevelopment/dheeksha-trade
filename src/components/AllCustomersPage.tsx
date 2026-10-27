@@ -40,6 +40,7 @@ import { CustomersApi, AccountsApi, CompaniesApi } from '../services/api';
 import { printCustomerListDirectly } from '../utils/printUtils';
 import { shareLedgerOnWhatsApp } from '../utils/whatsappUtils';
 import { DateRangePrintModal } from './DateRangePrintModal';
+import { DatePickerField } from './DatePickerField';
 
 export interface CustomerFinancial {
   _id?: string;
@@ -1471,15 +1472,10 @@ export const AllCustomersPage: FC<AllCustomersPageProps> = ({
               <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#475569', mb: 0.5 }}>
                 Payment Date
               </Typography>
-              <TextField
-                fullWidth
-                size="small"
+              <DatePickerField
                 value={paymentForm.date}
-                onChange={(e) => setPaymentForm({ ...paymentForm, date: e.target.value })}
+                onChange={(val) => setPaymentForm({ ...paymentForm, date: val })}
                 placeholder="DD-MM-YYYY"
-                slotProps={{
-                  input: { sx: { fontSize: '13.5px', fontWeight: 500, borderRadius: '6px' } },
-                }}
               />
             </Box>
           </Box>

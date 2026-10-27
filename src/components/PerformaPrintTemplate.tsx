@@ -25,8 +25,17 @@ export interface PerformaPrintData {
     gst?: string;
   };
   advanceAmount: number;
+  initialAdvance?: number;
+  additionalCredits?: number;
+  totalAdvanceReceived?: number;
+  totalAvailableAmount?: number;
   advanceUsedAmount?: number;
+  usedAmount?: number;
   remainingAdvanceAmount?: number;
+  balanceAmount?: number;
+  performaRemainingAmount?: number;
+  customerPendingAmount?: number;
+  customerBills?: any[];
   products: PerformaPrintProduct[];
   totalRequiredCases: number;
   totalUsedCases?: number;
@@ -113,6 +122,21 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
 
   // Total Allocated Value = Subtotal - Discount + Packing + Tax
   const totalAllocatedVal = Math.max(0, subtotalVal - discountAmt + packingAmt + taxAmt);
+
+  const initAdv = performa.initialAdvance !== undefined ? performa.initialAdvance : (Number(performa.advanceAmount) || 0);
+  const addlCred = performa.additionalCredits !== undefined ? performa.additionalCredits : 0;
+  const totalAdvReceived = performa.totalAdvanceReceived !== undefined
+    ? performa.totalAdvanceReceived
+    : (performa.totalAvailableAmount !== undefined ? performa.totalAvailableAmount : (initAdv + addlCred));
+  const usedAmt = performa.usedAmount !== undefined
+    ? performa.usedAmount
+    : (performa.advanceUsedAmount !== undefined ? performa.advanceUsedAmount : 0);
+  const customerAdvBal = performa.balanceAmount !== undefined
+    ? performa.balanceAmount
+    : (performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : (totalAdvReceived - usedAmt));
+  const performaPendingVal = performa.performaRemainingAmount !== undefined
+    ? performa.performaRemainingAmount
+    : Math.max(0, totalAllocatedVal - totalAdvReceived);
 
   return (
     <div
@@ -372,36 +396,68 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
             <strong style={{ color: '#0B4DB7', fontWeight: 800, fontSize: '13.5px' }}>₹ {formatCurrency(totalAllocatedVal)}</strong>
           </div>
           <div style={{ height: '1px', backgroundColor: '#CBD5E1', margin: '6px 0' }} />
+          {/* Customer Advance & Payments Breakdown */}
+          {initAdv > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', color: '#475569' }}>
+              <span>Initial Advance:</span>
+              <strong style={{ fontWeight: 600 }}>₹ {formatCurrency(initAdv)}</strong>
+            </div>
+          )}
+
+          {addlCred > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', color: '#1E40AF' }}>
+              <span>Addl Credits / Payments:</span>
+              <strong style={{ fontWeight: 600 }}>+ ₹ {formatCurrency(addlCred)}</strong>
+            </div>
+          )}
+
           <div
             style={{
               display: 'flex',
               justifyContent: 'space-between',
               marginBottom: '5px',
+              paddingTop: '3px',
+              borderTop: (initAdv > 0 && addlCred > 0) ? '1px dashed #CBD5E1' : undefined,
               color: '#0B4DB7',
             }}
           >
-            <span style={{ fontWeight: 700 }}>Customer Advance:</span>
-            <strong style={{ fontWeight: 800 }}>
-              ₹ {formatCurrency(
-                Number(performa.advanceAmount) > 0
-                  ? performa.advanceAmount
-                  : (performa as any).initialAdvance || (performa as any).totalAvailableAmount || 0
-              )}
-            </strong>
+            <span style={{ fontWeight: 700 }}>Total Advance Received:</span>
+            <strong style={{ fontWeight: 800 }}>₹ {formatCurrency(totalAdvReceived)}</strong>
           </div>
-          {performa.advanceUsedAmount !== undefined && performa.advanceUsedAmount > 0 ? (
+
+          {usedAmt > 0 && (
             <div
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                marginBottom: '5px',
+                marginBottom: '4px',
                 color: '#DC2626',
               }}
             >
-              <span>Advance Consumed:</span>
-              <strong style={{ fontWeight: 700 }}>- ₹ {formatCurrency(performa.advanceUsedAmount)}</strong>
+              <span>Particulars Billed (Used):</span>
+              <strong style={{ fontWeight: 700 }}>- ₹ {formatCurrency(usedAmt)}</strong>
             </div>
-          ) : null}
+          )}
+
+          {/* Performa Pending Amount */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              paddingTop: '4px',
+              borderTop: '1px dashed #CBD5E1',
+              marginTop: '3px',
+              fontSize: '11.5px',
+              color: performaPendingVal > 0 ? '#B91C1C' : '#15803D',
+            }}
+          >
+            <span style={{ fontWeight: 700 }}>Performa Balance to Pay:</span>
+            <strong style={{ fontWeight: 800 }}>
+              {performaPendingVal > 0 ? `₹ ${formatCurrency(performaPendingVal)}` : 'NIL (Fully Paid)'}
+            </strong>
+          </div>
+
+          {/* Remaining Advance Balance */}
           <div
             style={{
               display: 'flex',
@@ -410,14 +466,49 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
               borderTop: '2px solid #0B4DB7',
               marginTop: '4px',
               fontSize: '13px',
-              color: '#166534',
+              color: customerAdvBal >= 0 ? '#166534' : '#DC2626',
             }}
           >
-            <span style={{ fontWeight: 800 }}>Remaining Advance:</span>
-            <strong style={{ fontWeight: 900 }}>₹ {formatCurrency(performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : Math.max(0, (performa.advanceAmount || 0) - (performa.advanceUsedAmount || 0)))}</strong>
+            <span style={{ fontWeight: 800 }}>
+              {customerAdvBal >= 0 ? 'Available Advance Balance:' : 'Net Pending Debit:'}
+            </span>
+            <strong style={{ fontWeight: 900 }}>₹ {formatCurrency(Math.abs(customerAdvBal))}</strong>
           </div>
         </div>
       </div>
+
+      {/* Linked Particulars Bills Table (if any) */}
+      {performa.customerBills && performa.customerBills.length > 0 && (
+        <div style={{ marginTop: '14px', marginBottom: '14px', pageBreakInside: 'avoid' }}>
+          <div style={{ fontSize: '11px', fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>
+            Linked Particulars Purchase Bills ({performa.customerBills.length})
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', border: '1px solid #CBD5E1' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#F1F5F9' }}>
+                <th style={{ padding: '4px 6px', textAlign: 'center', border: '1px solid #CBD5E1', width: '30px' }}>#</th>
+                <th style={{ padding: '4px 8px', textAlign: 'left', border: '1px solid #CBD5E1' }}>Bill No</th>
+                <th style={{ padding: '4px 8px', textAlign: 'left', border: '1px solid #CBD5E1', width: '80px' }}>Date</th>
+                <th style={{ padding: '4px 8px', textAlign: 'left', border: '1px solid #CBD5E1' }}>Company</th>
+                <th style={{ padding: '4px 6px', textAlign: 'center', border: '1px solid #CBD5E1', width: '50px' }}>Cases</th>
+                <th style={{ padding: '4px 8px', textAlign: 'right', border: '1px solid #CBD5E1', width: '90px' }}>Net Total (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {performa.customerBills.map((b: any, bIdx: number) => (
+                <tr key={bIdx} style={{ backgroundColor: bIdx % 2 === 1 ? '#F8FAFC' : '#FFFFFF' }}>
+                  <td style={{ padding: '4px 6px', textAlign: 'center', border: '1px solid #CBD5E1' }}>{bIdx + 1}</td>
+                  <td style={{ padding: '4px 8px', fontWeight: 700, border: '1px solid #CBD5E1' }}>#{b.billNo}</td>
+                  <td style={{ padding: '4px 8px', border: '1px solid #CBD5E1' }}>{b.date}</td>
+                  <td style={{ padding: '4px 8px', border: '1px solid #CBD5E1', color: '#0B4DB7' }}>{b.companyName || '-'}</td>
+                  <td style={{ padding: '4px 6px', textAlign: 'center', border: '1px solid #CBD5E1' }}>{b.caseCount || '0'}</td>
+                  <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 700, border: '1px solid #CBD5E1' }}>₹ {formatCurrency(b.netTotal || parseFloat(b.total || b.amount || 0))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Footer Signatures */}
       <div

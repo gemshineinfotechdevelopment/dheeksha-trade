@@ -33,6 +33,8 @@ export interface IPerforma extends Document {
     gst?: string;
   };
   advanceAmount: number;
+  additionalCredits?: number;
+  totalAdvanceReceived?: number;
   advanceUsedAmount: number;
   remainingAdvanceAmount: number;
   products: IPerformaProductItem[];
@@ -89,6 +91,8 @@ const PerformaSchema: Schema = new Schema(
       gst: { type: String, trim: true, default: '' },
     },
     advanceAmount: { type: Number, required: true, min: 0, default: 0 },
+    additionalCredits: { type: Number, default: 0 },
+    totalAdvanceReceived: { type: Number, default: 0 },
     advanceUsedAmount: { type: Number, required: true, min: 0, default: 0 },
     remainingAdvanceAmount: { type: Number, required: true, min: 0, default: 0 },
     products: [PerformaProductItemSchema],
