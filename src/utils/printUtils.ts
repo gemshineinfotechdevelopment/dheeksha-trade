@@ -1277,15 +1277,36 @@ export const generatePerformaHtml = (performa: any): string => {
 
   const initAdv = performa.initialAdvance !== undefined ? performa.initialAdvance : (Number(performa.advanceAmount) || 0);
   const addlCred = performa.additionalCredits !== undefined ? performa.additionalCredits : 0;
+
+  const billsTotalCases = (performa.customerBills || []).reduce(
+    (acc: number, b: any) => acc + (parseFloat(String(b.caseCount || 0)) || 0),
+    0
+  );
+  const billsTotalAmt = (performa.customerBills || []).reduce(
+    (acc: number, b: any) => acc + (parseFloat(String(b.netTotal || b.total || b.amount || 0)) || 0),
+    0
+  );
+
   const totalAdvReceived = performa.totalAdvanceReceived !== undefined
     ? performa.totalAdvanceReceived
-    : (performa.totalAvailableAmount !== undefined ? performa.totalAvailableAmount : (initAdv + addlCred));
+    : (performa.totalAvailableAmount !== undefined
+      ? performa.totalAvailableAmount
+      : (performa.ledgerTotalCredit !== undefined
+        ? performa.ledgerTotalCredit
+        : Math.max(initAdv + addlCred, initAdv)));
+
   const usedAmt = performa.usedAmount !== undefined
     ? performa.usedAmount
-    : (performa.advanceUsedAmount !== undefined ? performa.advanceUsedAmount : 0);
+    : (performa.ledgerTotalDebit !== undefined
+      ? performa.ledgerTotalDebit
+      : (performa.advanceUsedAmount !== undefined ? performa.advanceUsedAmount : billsTotalAmt));
+
   const customerAdvBal = performa.balanceAmount !== undefined
     ? performa.balanceAmount
-    : (performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : (totalAdvReceived - usedAmt));
+    : (performa.ledgerCreditBalance !== undefined
+      ? performa.ledgerCreditBalance
+      : (performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : (totalAdvReceived - usedAmt)));
+
   const performaPendingVal = performa.performaRemainingAmount !== undefined
     ? performa.performaRemainingAmount
     : Math.max(0, totalAllocatedVal - totalAdvReceived);
@@ -1431,12 +1452,11 @@ export const generatePerformaHtml = (performa: any): string => {
               <span>Addl Credits / Payments:</span><strong style="font-weight: 600;">+ ₹ ${formatCurrency(addlCred)}</strong>
             </div>` : ''}
             <div class="summary-row" style="color: #0B4DB7; padding-top: 3px; border-top: ${(initAdv > 0 && addlCred > 0) ? '1px dashed #CBD5E1' : 'none'};">
-              <span style="font-weight: 700;">Total Advance Received:</span><strong style="font-weight: 800;">₹ ${formatCurrency(totalAdvReceived)}</strong>
+              <span style="font-weight: 700;">Total Credit / Advance:</span><strong style="font-weight: 800;">₹ ${formatCurrency(totalAdvReceived)}</strong>
             </div>
-            ${usedAmt > 0 ? `
-            <div class="summary-row" style="color: #DC2626;">
-              <span>Particulars Billed (Used):</span><strong style="font-weight: 700;">- ₹ ${formatCurrency(usedAmt)}</strong>
-            </div>` : ''}
+            <div class="summary-row" style="color: ${usedAmt > 0 ? '#DC2626' : '#475569'};">
+              <span style="font-weight: 600;">Particulars Purchases (Debit):</span><strong style="font-weight: 700;">- ₹ ${formatCurrency(usedAmt)}</strong>
+            </div>
             <div class="summary-row" style="padding-top: 4px; border-top: 1px dashed #CBD5E1; margin-top: 3px; font-size: 11.5px; color: ${performaPendingVal > 0 ? '#B91C1C' : '#15803D'};">
               <span style="font-weight: 700;">Performa Balance to Pay:</span><strong style="font-weight: 800;">${performaPendingVal > 0 ? `₹ ${formatCurrency(performaPendingVal)}` : 'NIL (Fully Paid)'}</strong>
             </div>
@@ -1474,6 +1494,19 @@ export const generatePerformaHtml = (performa: any): string => {
                 </tr>
               `).join('')}
             </tbody>
+            <tfoot>
+              <tr style="background-color: #F1F5F9; font-weight: 800;">
+                <td colspan="4" style="padding: 5px 8px; text-align: right; border: 1px solid #CBD5E1; color: #0F172A;">
+                  Total Particulars Purchases:
+                </td>
+                <td style="padding: 5px 6px; text-align: center; border: 1px solid #CBD5E1; color: #0F172A;">
+                  ${billsTotalCases}
+                </td>
+                <td style="padding: 5px 8px; text-align: right; border: 1px solid #CBD5E1; color: #DC2626;">
+                  ₹ ${formatCurrency(billsTotalAmt)}
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>` : ''}
 

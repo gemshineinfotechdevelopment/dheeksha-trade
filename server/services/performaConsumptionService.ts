@@ -639,23 +639,29 @@ export const getCustomerPerformaSummary = async (customerIdentifier: string): Pr
   let additionalCredits = 0;
   let totalUsedByBills = 0;
 
-  // Calculate Used Amount = SUM of Net Total of all customer's Particulars bills
+  // Calculate Used Amount = SUM of Net Total of all customer's Particulars bills or AccountLedger totalDebit
   if (customerParticulars.length > 0) {
     totalUsedByBills = customerParticulars.reduce((sum, p) => sum + getParticularNetTotal(p), 0);
   } else {
     totalUsedByBills = 0;
   }
-  totalUsedByBills = Number(totalUsedByBills.toFixed(2));
+  totalUsedByBills = Math.max(Number(totalUsedByBills.toFixed(2)), Number(ledgerTotalDebit.toFixed(2)));
 
   // Determine total credits from ledger
   const advanceAudits = audits.filter(
     (a) => a.type === 'ADVANCE_RECEIVED' || a.type === 'PERFORMA_ADVANCE'
   );
   const totalAuditCredits = advanceAudits.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
-  const effectiveTotalCredits = Math.max(ledgerTotalCredit, totalAuditCredits);
+  const masterAdv = masterPerforma ? (Number(masterPerforma.advanceAmount) || 0) : 0;
+  const masterAddl = masterPerforma ? (Number(masterPerforma.additionalCredits) || 0) : 0;
+  const effectiveTotalCredits = Math.max(
+    Number(ledgerTotalCredit.toFixed(2)),
+    Number(totalAuditCredits.toFixed(2)),
+    Number((masterAdv + masterAddl).toFixed(2)),
+    masterAdv
+  );
 
   if (masterPerforma) {
-    const masterAdv = Number(masterPerforma.advanceAmount) || 0;
     if (masterAdv > 0) {
       initialAdvance = masterAdv;
       additionalCredits = Math.max(0, Number((effectiveTotalCredits - masterAdv).toFixed(2)));
@@ -670,7 +676,7 @@ export const getCustomerPerformaSummary = async (customerIdentifier: string): Pr
     additionalCredits = effectiveTotalCredits;
   }
 
-  const totalAdvanceReceived = Number((initialAdvance + additionalCredits).toFixed(2));
+  const totalAdvanceReceived = Number(effectiveTotalCredits.toFixed(2));
   const availableAmount = Math.max(0, Number((totalAdvanceReceived - totalUsedByBills).toFixed(2)));
   const balanceAmount = Number((totalAdvanceReceived - totalUsedByBills).toFixed(2));
   const customerPendingAmount = balanceAmount < 0 ? Math.abs(balanceAmount) : 0;

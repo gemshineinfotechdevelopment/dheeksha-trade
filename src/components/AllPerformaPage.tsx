@@ -223,20 +223,60 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
   };
 
   // Open Print Modal
-  const handleOpenPrintModal = (performa: any) => {
-    const totalAvail = performa.totalAvailableAmount !== undefined ? performa.totalAvailableAmount : (performa.advanceAmount || 0);
-    const usedAmt = performa.usedAmount !== undefined ? performa.usedAmount : (performa.advanceUsedAmount || 0);
-    const remAmt = performa.remainingAmount !== undefined ? performa.remainingAmount : (performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : Math.max(0, totalAvail - usedAmt));
+  const handleOpenPrintModal = async (performa: any) => {
+    let fullPerforma = performa;
+    if (performa._id && (!performa.customerBills || performa.customerBills.length === 0 || performa.totalAdvanceReceived === undefined)) {
+      try {
+        const res = await PerformasApi.getById(performa._id);
+        if (res) fullPerforma = { ...performa, ...res };
+      } catch (err) {
+        console.warn('Failed to load full performa for print:', err);
+      }
+    }
+
+    const totalAvail = fullPerforma.totalAdvanceReceived !== undefined
+      ? fullPerforma.totalAdvanceReceived
+      : (fullPerforma.totalAvailableAmount !== undefined ? fullPerforma.totalAvailableAmount : (Number(fullPerforma.advanceAmount) || 0));
+    const usedAmt = fullPerforma.usedAmount !== undefined
+      ? fullPerforma.usedAmount
+      : (fullPerforma.advanceUsedAmount !== undefined ? fullPerforma.advanceUsedAmount : 0);
+    const remAmt = fullPerforma.remainingAdvanceAmount !== undefined
+      ? fullPerforma.remainingAdvanceAmount
+      : (fullPerforma.remainingAmount !== undefined ? fullPerforma.remainingAmount : Math.max(0, totalAvail - usedAmt));
+    const balAmt = fullPerforma.balanceAmount !== undefined
+      ? fullPerforma.balanceAmount
+      : (totalAvail - usedAmt);
+    const initAdv = fullPerforma.initialAdvance !== undefined
+      ? fullPerforma.initialAdvance
+      : (Number(fullPerforma.advanceAmount) || 0);
+    const addlCred = fullPerforma.additionalCredits !== undefined
+      ? fullPerforma.additionalCredits
+      : Math.max(0, totalAvail - initAdv);
+    const bills = fullPerforma.customerBills || [];
 
     const printData: PerformaPrintData = {
-      performaNumber: performa.performaNumber,
-      companyName: performa.companyName || performa.customerSnapshot?.companyName,
-      date: performa.date,
-      customerSnapshot: performa.customerSnapshot,
+      ...fullPerforma,
+      performaNumber: fullPerforma.performaNumber,
+      companyName: fullPerforma.companyName || fullPerforma.customerSnapshot?.companyName,
+      date: fullPerforma.date,
+      customerSnapshot: fullPerforma.customerSnapshot,
       advanceAmount: totalAvail,
+      initialAdvance: initAdv,
+      additionalCredits: addlCred,
+      totalAdvanceReceived: totalAvail,
+      totalAvailableAmount: totalAvail,
       advanceUsedAmount: usedAmt,
+      usedAmount: usedAmt,
       remainingAdvanceAmount: remAmt,
-      products: (performa.products || []).map((p: any) => ({
+      balanceAmount: balAmt,
+      performaRemainingAmount: fullPerforma.performaRemainingAmount !== undefined
+        ? fullPerforma.performaRemainingAmount
+        : Math.max(0, (fullPerforma.totalAllocatedAmount || 0) - totalAvail),
+      customerPendingAmount: fullPerforma.customerPendingAmount !== undefined
+        ? fullPerforma.customerPendingAmount
+        : (balAmt < 0 ? Math.abs(balAmt) : 0),
+      customerBills: bills,
+      products: (fullPerforma.products || []).map((p: any) => ({
         productCode: p.productSnapshot?.productCode || p.productCode,
         productName: p.productSnapshot?.productName || p.productName,
         companyName: p.productSnapshot?.companyName || p.companyName,
@@ -248,21 +288,21 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
         pktPerUnit: p.pktPerUnit || 1,
         allocatedAmount: p.allocatedAmount,
       })),
-      totalRequiredCases: performa.totalRequiredCases,
-      totalUsedCases: performa.totalUsedCases,
-      totalRemainingCases: performa.totalRemainingCases,
-      subtotal: performa.subtotal,
-      discount: performa.discount,
-      discountAmount: performa.discountAmount,
-      packing: performa.packing,
-      packingAmount: performa.packingAmount,
-      tax: performa.tax,
-      taxAmount: performa.taxAmount,
-      totalAllocatedAmount: performa.totalAllocatedAmount,
-      totalUsedAmount: performa.totalUsedAmount,
-      totalRemainingAmount: performa.totalRemainingAmount,
-      status: performa.status,
-      notes: performa.notes,
+      totalRequiredCases: fullPerforma.totalRequiredCases,
+      totalUsedCases: fullPerforma.totalUsedCases,
+      totalRemainingCases: fullPerforma.totalRemainingCases,
+      subtotal: fullPerforma.subtotal,
+      discount: fullPerforma.discount,
+      discountAmount: fullPerforma.discountAmount,
+      packing: fullPerforma.packing,
+      packingAmount: fullPerforma.packingAmount,
+      tax: fullPerforma.tax,
+      taxAmount: fullPerforma.taxAmount,
+      totalAllocatedAmount: fullPerforma.totalAllocatedAmount,
+      totalUsedAmount: fullPerforma.totalUsedAmount || usedAmt,
+      totalRemainingAmount: fullPerforma.totalRemainingAmount,
+      status: fullPerforma.status,
+      notes: fullPerforma.notes,
     };
     setSelectedPerformaForPrint(printData);
     setPrintModalOpen(true);

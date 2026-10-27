@@ -81,9 +81,23 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
 
     const performas = await Performa.find(filter).sort(sortObj).lean();
 
-    // Fetch all audits and particulars to calculate exact initial advance, additional credits, and consumed Net Totals per performa
+    // Fetch all audits, particulars, and account ledger entries to calculate exact initial advance, credits, and debits with 100% parity to Particulars
     const allAudits = await PerformaAudit.find({}).lean();
     const allParticulars = await Particular.find({}).lean();
+    const allAccountLedgers = await AccountLedger.find({}).lean();
+
+    // Map account ledger credit and debit by customerName (lowercase)
+    const ledgerByCustomer = new Map<string, { totalCredit: number; totalDebit: number }>();
+    for (const entry of allAccountLedgers) {
+      const cKey = (entry.customerName || '').trim().toLowerCase();
+      if (!cKey) continue;
+      const current = ledgerByCustomer.get(cKey) || { totalCredit: 0, totalDebit: 0 };
+      const cred = parseFloat(String(entry.credit || '0').replace(/,/g, '')) || 0;
+      const deb = parseFloat(String(entry.debit || '0').replace(/,/g, '')) || 0;
+      current.totalCredit += cred;
+      current.totalDebit += deb;
+      ledgerByCustomer.set(cKey, current);
+    }
 
     // Map particulars by ID, billNo, and customerName
     const particularById = new Map<string, any>();
@@ -173,26 +187,32 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
     const enrichedPerformas = performas.map((p) => {
       const pId = String(p._id);
       const auditData = auditMap.get(pId);
-
-      const pAdv = Number(p.advanceAmount) || 0;
-      const totalCreds = auditData?.totalCredits || 0;
-
-      // Initial advance: performa's advanceAmount or audit initialAdvance, or totalCredits if initial is 0
-      let initialAdvance = pAdv > 0 ? pAdv : (auditData?.initialAdvance || (totalCreds > 0 ? totalCreds : 0));
-      // Additional credits: credits strictly beyond the initial advance
-      let additionalCredits = Math.max(0, Number((totalCreds - initialAdvance).toFixed(2)));
-      let totalAvailableAmount = Number((initialAdvance + additionalCredits).toFixed(2));
-      if (totalAvailableAmount === 0 && pAdv > 0) {
-        totalAvailableAmount = pAdv;
-      }
-
       const custKey = (p.customerSnapshot?.name || '').trim().toLowerCase();
+      const ledgerData = ledgerByCustomer.get(custKey) || { totalCredit: 0, totalDebit: 0 };
       const custBills = particularsByCustomer.get(custKey) || [];
 
-      // Calculate Used Amount = SUM of Net Total of all customer's Particulars bills
+      const pAdv = Number(p.advanceAmount) || 0;
+      const pDocAddl = Number(p.additionalCredits) || 0;
+      const pDocTotAdv = Number(p.totalAdvanceReceived) || 0;
+      const auditTotalCreds = auditData?.totalCredits || 0;
+
+      // Total Advance Received (Credit): maximum of AccountLedger credit, audits, and performa stored values
+      const totalAvailableAmount = Math.max(
+        Number(ledgerData.totalCredit.toFixed(2)),
+        auditTotalCreds,
+        pDocTotAdv,
+        pAdv + pDocAddl,
+        pAdv
+      );
+
+      let initialAdvance = pAdv > 0 ? pAdv : (auditData?.initialAdvance || totalAvailableAmount);
+      if (initialAdvance > totalAvailableAmount) initialAdvance = totalAvailableAmount;
+      const additionalCredits = Math.max(0, Number((totalAvailableAmount - initialAdvance).toFixed(2)));
+
+      // Calculate Used Amount = SUM of Net Total of all customer's Particulars bills or AccountLedger debit
       let consumedNetTotal = 0;
       if (custBills.length > 0) {
-        consumedNetTotal = custBills.reduce((sum, b) => sum + (b.netTotal || 0), 0);
+        consumedNetTotal = custBills.reduce((sum, b) => sum + (b.netTotal || b.total || 0), 0);
       } else if (auditData && auditData.consumedParticularIds.size > 0) {
         for (const pKey of auditData.consumedParticularIds) {
           if (pKey.startsWith('bill_')) {
@@ -209,11 +229,12 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
           }
         }
       }
+      const usedAmount = Math.max(Number(consumedNetTotal.toFixed(2)), Number(ledgerData.totalDebit.toFixed(2)));
 
       const performaTotalValue = Number((p.totalAllocatedAmount || 0).toFixed(2));
-      const usedAmount = Number(consumedNetTotal.toFixed(2));
-      const remainingAmount = Number((totalAvailableAmount - usedAmount).toFixed(2));
-      const dbRemainingAdvance = Math.max(0, remainingAmount);
+      const balanceAmount = Number((totalAvailableAmount - usedAmount).toFixed(2));
+      const remainingAmount = balanceAmount;
+      const dbRemainingAdvance = Math.max(0, balanceAmount);
 
       // Sync master performa DB document if out of sync
       if (p.advanceUsedAmount !== usedAmount || p.remainingAdvanceAmount !== dbRemainingAdvance) {
@@ -240,11 +261,14 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
         usedAmount,
         remainingAmount,
         advanceUsedAmount: usedAmount,
-        remainingAdvanceAmount: remainingAmount,
-        balanceAmount: remainingAmount,
-        customerPendingAmount: remainingAmount < 0 ? Math.abs(remainingAmount) : 0,
+        remainingAdvanceAmount: dbRemainingAdvance,
+        balanceAmount,
+        customerPendingAmount: balanceAmount < 0 ? Math.abs(balanceAmount) : 0,
         performaRemainingAmount: Math.max(0, Number((performaTotalValue - totalAvailableAmount).toFixed(2))),
         customerBills: custBills,
+        ledgerTotalCredit: Number(ledgerData.totalCredit.toFixed(2)),
+        ledgerTotalDebit: Number(ledgerData.totalDebit.toFixed(2)),
+        ledgerCreditBalance: Number((ledgerData.totalCredit - ledgerData.totalDebit).toFixed(2)),
       };
     });
 

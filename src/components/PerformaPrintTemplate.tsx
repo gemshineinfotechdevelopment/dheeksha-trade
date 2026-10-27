@@ -35,6 +35,9 @@ export interface PerformaPrintData {
   balanceAmount?: number;
   performaRemainingAmount?: number;
   customerPendingAmount?: number;
+  ledgerTotalCredit?: number;
+  ledgerTotalDebit?: number;
+  ledgerCreditBalance?: number;
   customerBills?: any[];
   products: PerformaPrintProduct[];
   totalRequiredCases: number;
@@ -125,15 +128,36 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
 
   const initAdv = performa.initialAdvance !== undefined ? performa.initialAdvance : (Number(performa.advanceAmount) || 0);
   const addlCred = performa.additionalCredits !== undefined ? performa.additionalCredits : 0;
+
+  const billsTotalCases = (performa.customerBills || []).reduce(
+    (acc: number, b: any) => acc + (parseFloat(String(b.caseCount || 0)) || 0),
+    0
+  );
+  const billsTotalAmt = (performa.customerBills || []).reduce(
+    (acc: number, b: any) => acc + (parseFloat(String(b.netTotal || b.total || b.amount || 0)) || 0),
+    0
+  );
+
   const totalAdvReceived = performa.totalAdvanceReceived !== undefined
     ? performa.totalAdvanceReceived
-    : (performa.totalAvailableAmount !== undefined ? performa.totalAvailableAmount : (initAdv + addlCred));
+    : (performa.totalAvailableAmount !== undefined
+      ? performa.totalAvailableAmount
+      : (performa.ledgerTotalCredit !== undefined
+        ? performa.ledgerTotalCredit
+        : Math.max(initAdv + addlCred, initAdv)));
+
   const usedAmt = performa.usedAmount !== undefined
     ? performa.usedAmount
-    : (performa.advanceUsedAmount !== undefined ? performa.advanceUsedAmount : 0);
+    : (performa.ledgerTotalDebit !== undefined
+      ? performa.ledgerTotalDebit
+      : (performa.advanceUsedAmount !== undefined ? performa.advanceUsedAmount : billsTotalAmt));
+
   const customerAdvBal = performa.balanceAmount !== undefined
     ? performa.balanceAmount
-    : (performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : (totalAdvReceived - usedAmt));
+    : (performa.ledgerCreditBalance !== undefined
+      ? performa.ledgerCreditBalance
+      : (performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : (totalAdvReceived - usedAmt)));
+
   const performaPendingVal = performa.performaRemainingAmount !== undefined
     ? performa.performaRemainingAmount
     : Math.max(0, totalAllocatedVal - totalAdvReceived);
@@ -415,29 +439,27 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
             style={{
               display: 'flex',
               justifyContent: 'space-between',
-              marginBottom: '5px',
+              marginBottom: '4px',
               paddingTop: '3px',
               borderTop: (initAdv > 0 && addlCred > 0) ? '1px dashed #CBD5E1' : undefined,
               color: '#0B4DB7',
             }}
           >
-            <span style={{ fontWeight: 700 }}>Total Advance Received:</span>
+            <span style={{ fontWeight: 700 }}>Total Credit / Advance:</span>
             <strong style={{ fontWeight: 800 }}>₹ {formatCurrency(totalAdvReceived)}</strong>
           </div>
 
-          {usedAmt > 0 && (
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginBottom: '4px',
-                color: '#DC2626',
-              }}
-            >
-              <span>Particulars Billed (Used):</span>
-              <strong style={{ fontWeight: 700 }}>- ₹ {formatCurrency(usedAmt)}</strong>
-            </div>
-          )}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              marginBottom: '4px',
+              color: usedAmt > 0 ? '#DC2626' : '#475569',
+            }}
+          >
+            <span style={{ fontWeight: 600 }}>Particulars Purchases (Debit):</span>
+            <strong style={{ fontWeight: 700 }}>- ₹ {formatCurrency(usedAmt)}</strong>
+          </div>
 
           {/* Performa Pending Amount */}
           <div
@@ -506,6 +528,19 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr style={{ backgroundColor: '#F1F5F9', fontWeight: 800 }}>
+                <td colSpan={4} style={{ padding: '5px 8px', textAlign: 'right', border: '1px solid #CBD5E1', color: '#0F172A' }}>
+                  Total Particulars Purchases:
+                </td>
+                <td style={{ padding: '5px 6px', textAlign: 'center', border: '1px solid #CBD5E1', color: '#0F172A' }}>
+                  {billsTotalCases}
+                </td>
+                <td style={{ padding: '5px 8px', textAlign: 'right', border: '1px solid #CBD5E1', color: '#DC2626' }}>
+                  ₹ {formatCurrency(billsTotalAmt)}
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
