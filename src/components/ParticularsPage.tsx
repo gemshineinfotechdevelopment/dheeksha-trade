@@ -3156,7 +3156,7 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                 <Typography sx={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', mb: 1.5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   Customer Performa & Balance Overview
                 </Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(4, 1fr)' }, gap: 2 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: (customerPerformaSummary?.customerPendingAmount && customerPerformaSummary.customerPendingAmount > 0) ? 'repeat(5, 1fr)' : 'repeat(4, 1fr)' }, gap: 2 }}>
                   <Box>
                     <Typography sx={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Customer</Typography>
                     <Typography sx={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A' }}>
@@ -3176,18 +3176,57 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                       }}
                     />
                   </Box>
-                  <Box>
-                    <Typography sx={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Current Available</Typography>
-                    <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#16A34A' }}>
-                      ₹{(customerPerformaSummary?.availableAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </Typography>
-                  </Box>
-                  <Box>
-                    <Typography sx={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>After Credit</Typography>
-                    <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#0B4DB7' }}>
-                      ₹{((customerPerformaSummary?.availableAmount ?? 0) + (parseFloat(creditAmount) || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </Typography>
-                  </Box>
+                  {customerPerformaSummary?.customerPendingAmount && customerPerformaSummary.customerPendingAmount > 0 ? (
+                    <>
+                      <Box>
+                        <Typography sx={{ fontSize: '12px', color: '#DC2626', fontWeight: 600 }}>Current Pending Due</Typography>
+                        <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#DC2626' }}>
+                          ₹{customerPerformaSummary.customerPendingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography sx={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Available Advance</Typography>
+                        <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#16A34A' }}>
+                          ₹0.00
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography sx={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>After Credit</Typography>
+                        {(() => {
+                          const cred = parseFloat(creditAmount) || 0;
+                          const netPending = (customerPerformaSummary.customerPendingAmount || 0) - cred;
+                          if (netPending > 0) {
+                            return (
+                              <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#E11D48' }}>
+                                ₹{netPending.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Due)
+                              </Typography>
+                            );
+                          }
+                          const surplus = Math.abs(netPending);
+                          return (
+                            <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#16A34A' }}>
+                              ₹{surplus.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Advance)
+                            </Typography>
+                          );
+                        })()}
+                      </Box>
+                    </>
+                  ) : (
+                    <>
+                      <Box>
+                        <Typography sx={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Current Available</Typography>
+                        <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#16A34A' }}>
+                          ₹{(customerPerformaSummary?.availableAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography sx={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>After Credit</Typography>
+                        <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#0B4DB7' }}>
+                          ₹{((customerPerformaSummary?.availableAmount ?? 0) + (parseFloat(creditAmount) || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                    </>
+                  )}
                 </Box>
               </Paper>
 

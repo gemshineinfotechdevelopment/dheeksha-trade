@@ -667,8 +667,10 @@ export const updatePerforma = async (req: Request, res: Response, next: NextFunc
 
     if (advanceAmount !== undefined) {
       const newAdv = parseFloat(String(advanceAmount).replace(/,/g, '')) || 0;
+      const totalRecv = Number((newAdv + (existing.additionalCredits || 0)).toFixed(2));
       existing.advanceAmount = newAdv;
-      existing.remainingAdvanceAmount = Math.max(0, Number((newAdv - existing.advanceUsedAmount).toFixed(2)));
+      existing.totalAdvanceReceived = totalRecv;
+      existing.remainingAdvanceAmount = Math.max(0, Number((totalRecv - existing.advanceUsedAmount).toFixed(2)));
 
       // Sync to AccountLedger
       const existingLedger = await AccountLedger.findOne({

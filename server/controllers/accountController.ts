@@ -81,11 +81,17 @@ export const deleteAccountEntry = async (req: Request, res: Response, next: Next
     if ((entry.type === 'CREDIT' || entry.type === 'ADVANCE') && creditAmt > 0) {
       const masterPerforma = await getCustomerMasterPerforma(customerName);
       if (masterPerforma) {
-        // NOTE: advanceAmount is never mutated by addCredit (it's the immutable original advance).
-        // Only roll back remainingAdvanceAmount.
+        masterPerforma.additionalCredits = Math.max(
+          0,
+          Number(((masterPerforma.additionalCredits || 0) - creditAmt).toFixed(2))
+        );
+        masterPerforma.totalAdvanceReceived = Math.max(
+          0,
+          Number(((masterPerforma.advanceAmount || 0) + masterPerforma.additionalCredits).toFixed(2))
+        );
         masterPerforma.remainingAdvanceAmount = Math.max(
           0,
-          Number((masterPerforma.remainingAdvanceAmount - creditAmt).toFixed(2))
+          Number((masterPerforma.totalAdvanceReceived - (masterPerforma.advanceUsedAmount || 0)).toFixed(2))
         );
         await masterPerforma.save();
       }

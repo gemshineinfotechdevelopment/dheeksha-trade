@@ -130,7 +130,7 @@ export const getCustomers = async (_req: Request, res: Response, next: NextFunct
       let availableAdvance = 0;
 
       if (masterPerforma) {
-        totalAdvanceReceived = Number((masterPerforma.advanceAmount || 0).toFixed(2));
+        totalAdvanceReceived = Number(((masterPerforma.totalAdvanceReceived || masterPerforma.advanceAmount) || 0).toFixed(2));
         totalAdvanceUsed = Number((masterPerforma.advanceUsedAmount || 0).toFixed(2));
         availableAdvance = Number((masterPerforma.remainingAdvanceAmount || 0).toFixed(2));
       } else {

@@ -49,9 +49,10 @@ export const BillPrintTemplate: React.FC<BillPrintTemplateProps> = ({ bill }) =>
   let discountAmt = 0;
   let discountLabel = 'Discount Amount';
   if (discNum > 0) {
-    if (rawDiscStr.includes('%') || (discNum <= 100 && !rawDiscStr.includes('.'))) {
+    const isDiscFlat = rawDiscStr.startsWith('₹') || rawDiscStr.toLowerCase().includes('rs');
+    if (rawDiscStr.includes('%') || (!isDiscFlat && discNum <= 100)) {
       discountAmt = (subtotal * discNum) / 100;
-      discountLabel = `Discount Amount (${bill.discount || discNum}${rawDiscStr.includes('%') ? '' : '%'})`;
+      discountLabel = `Discount Amount (${cleanDisc}%)`;
     } else {
       discountAmt = discNum;
       discountLabel = `Discount Amount (₹${discNum.toLocaleString('en-IN')})`;
@@ -68,9 +69,10 @@ export const BillPrintTemplate: React.FC<BillPrintTemplateProps> = ({ bill }) =>
   let packingLabel = 'Packing Charges';
   if (packNum > 0) {
     const baseAfterDiscount = Math.max(0, subtotal - discountAmt);
-    if (rawPackStr.includes('%') || (packNum <= 100 && !rawPackStr.includes('.'))) {
+    const isPackFlat = rawPackStr.startsWith('₹') || rawPackStr.toLowerCase().includes('rs');
+    if (rawPackStr.includes('%') || (!isPackFlat && packNum <= 100)) {
       packingAmt = (baseAfterDiscount * packNum) / 100;
-      packingLabel = `Packing Charges (${bill.packing || packNum}${rawPackStr.includes('%') ? '' : '%'})`;
+      packingLabel = `Packing Charges (${cleanPack}%)`;
     } else {
       packingAmt = packNum;
       packingLabel = `Packing Charges (₹${packNum.toLocaleString('en-IN')})`;

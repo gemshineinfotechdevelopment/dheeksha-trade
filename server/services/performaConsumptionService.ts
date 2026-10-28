@@ -67,7 +67,8 @@ export const getParticularNetTotal = (p: any): number => {
   let discountAmt = 0;
   const discStr = String(p.discount || '0').trim();
   const discNum = cleanNumber(discStr);
-  if (discStr.includes('%') || (discNum > 0 && discNum <= 100 && !discStr.includes('.'))) {
+  const isDiscFlat = discStr.startsWith('₹') || discStr.toLowerCase().includes('rs');
+  if (discStr.includes('%') || (!isDiscFlat && discNum > 0 && discNum <= 100)) {
     discountAmt = (subtotal * discNum) / 100;
   } else {
     discountAmt = discNum;
@@ -79,7 +80,8 @@ export const getParticularNetTotal = (p: any): number => {
   let packingAmt = 0;
   const packStr = String(p.packing || '0').trim();
   const packNum = cleanNumber(packStr);
-  if (packStr.includes('%') || (packNum > 0 && packNum <= 100 && !packStr.includes('.'))) {
+  const isPackFlat = packStr.startsWith('₹') || packStr.toLowerCase().includes('rs');
+  if (packStr.includes('%') || (!isPackFlat && packNum > 0 && packNum <= 100)) {
     packingAmt = (baseAfterDisc * packNum) / 100;
   } else {
     packingAmt = packNum;
@@ -191,8 +193,9 @@ export const addCustomerCreditToMasterPerforma = async (params: {
     masterPerforma.additionalCredits = Number((prevAddl + parsedCredit).toFixed(2));
     masterPerforma.totalAdvanceReceived = Number((initAdv + masterPerforma.additionalCredits).toFixed(2));
     const usedAmt = Number(masterPerforma.advanceUsedAmount) || 0;
-    masterPerforma.remainingAdvanceAmount = Number(
-      (masterPerforma.totalAdvanceReceived - usedAmt).toFixed(2)
+    masterPerforma.remainingAdvanceAmount = Math.max(
+      0,
+      Number((masterPerforma.totalAdvanceReceived - usedAmt).toFixed(2))
     );
     if (masterPerforma.status === 'COMPLETED' && masterPerforma.totalRemainingCases > 0) {
       masterPerforma.status = 'PARTIALLY_USED';
@@ -409,8 +412,9 @@ export const consumeBillAgainstPerforma = async (
       Number((masterPerforma.totalRequiredCases - masterPerforma.totalUsedCases).toFixed(2))
     );
     masterPerforma.advanceUsedAmount = totalBillsNetTotal > 0 ? totalBillsNetTotal : Number((masterPerforma.advanceUsedAmount + (result.consumed ? billNetTotal : 0)).toFixed(2));
-    masterPerforma.remainingAdvanceAmount = Number(
-      (totalAdvReceived - masterPerforma.advanceUsedAmount).toFixed(2)
+    masterPerforma.remainingAdvanceAmount = Math.max(
+      0,
+      Number((totalAdvReceived - masterPerforma.advanceUsedAmount).toFixed(2))
     );
     masterPerforma.totalUsedAmount = masterPerforma.advanceUsedAmount;
     masterPerforma.totalRemainingAmount = Math.max(
@@ -503,9 +507,10 @@ export const reverseBillConsumption = async (particularId: string): Promise<void
       );
 
       performa.advanceUsedAmount = remBillsNetTotal;
+      const effectiveAdvance = Number((performa.totalAdvanceReceived || performa.advanceAmount || 0).toFixed(2));
       performa.remainingAdvanceAmount = Math.max(
         0,
-        Number((performa.advanceAmount - performa.advanceUsedAmount).toFixed(2))
+        Number((effectiveAdvance - performa.advanceUsedAmount).toFixed(2))
       );
       performa.totalUsedAmount = remBillsNetTotal;
       performa.totalRemainingAmount = Math.max(

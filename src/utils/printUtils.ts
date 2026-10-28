@@ -66,9 +66,10 @@ export const generateBillHtml = (bill: BillPrintData): string => {
   let discountAmt = 0;
   let discountLabel = 'Discount Amount';
   if (discNum > 0) {
-    if (rawDiscStr.includes('%') || (discNum <= 100 && !rawDiscStr.includes('.'))) {
+    const isDiscFlat = rawDiscStr.startsWith('₹') || rawDiscStr.toLowerCase().includes('rs');
+    if (rawDiscStr.includes('%') || (!isDiscFlat && discNum <= 100)) {
       discountAmt = (subtotal * discNum) / 100;
-      discountLabel = `Discount (${bill.discount || discNum}${rawDiscStr.includes('%') ? '' : '%'})`;
+      discountLabel = `Discount (${cleanDisc}%)`;
     } else {
       discountAmt = discNum;
       discountLabel = `Discount (₹${discNum.toLocaleString('en-IN')})`;
@@ -86,9 +87,10 @@ export const generateBillHtml = (bill: BillPrintData): string => {
   let packingAmt = 0;
   let packingLabel = 'Packing Charges';
   if (packNum > 0) {
-    if (rawPackStr.includes('%') || (packNum <= 100 && !rawPackStr.includes('.'))) {
+    const isPackFlat = rawPackStr.startsWith('₹') || rawPackStr.toLowerCase().includes('rs');
+    if (rawPackStr.includes('%') || (!isPackFlat && packNum <= 100)) {
       packingAmt = (baseAfterDiscount * packNum) / 100;
-      packingLabel = `Packing (${bill.packing || packNum}${rawPackStr.includes('%') ? '' : '%'})`;
+      packingLabel = `Packing (${cleanPack}%)`;
     } else {
       packingAmt = packNum;
       packingLabel = `Packing (₹${packNum.toLocaleString('en-IN')})`;
