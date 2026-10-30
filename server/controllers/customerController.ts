@@ -4,8 +4,7 @@ import { AccountLedger } from '../models/AccountLedger';
 import { Performa } from '../models/Performa';
 import { PerformaAudit } from '../models/PerformaAudit';
 import { Particular } from '../models/Particular';
-import { escapeRegex } from '../utils/ledgerUtils';
-import { getParticularNetTotal } from '../services/performaConsumptionService';
+import { escapeRegex, getParticularNetTotal } from '../utils/ledgerUtils';
 
 export const getCustomers = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -125,24 +124,14 @@ export const getCustomers = async (_req: Request, res: Response, next: NextFunct
       const pendingDue = Number(Math.max(0, totalDebit - totalCredit).toFixed(2));
       const netBalance = Number((totalCredit - totalDebit).toFixed(2));
 
-      let totalAdvanceReceived = 0;
-      let totalAdvanceUsed = 0;
-      let availableAdvance = 0;
-
-      if (masterPerforma) {
-        totalAdvanceReceived = Number(((masterPerforma.totalAdvanceReceived || masterPerforma.advanceAmount) || 0).toFixed(2));
-        totalAdvanceUsed = Number((masterPerforma.advanceUsedAmount || 0).toFixed(2));
-        availableAdvance = Number((masterPerforma.remainingAdvanceAmount || 0).toFixed(2));
-      } else {
-        totalAdvanceReceived = Number(advStats.received.toFixed(2)) || totalCredit;
-        totalAdvanceUsed = Number(advStats.used.toFixed(2)) || totalDebit;
-        availableAdvance = Number(Math.max(0, totalAdvanceReceived - totalAdvanceUsed).toFixed(2));
-      }
+      const totalAdvanceReceived = totalCredit;
+      const totalAdvanceUsed = Math.min(totalCredit, totalDebit);
+      const availableAdvance = Math.max(0, netBalance);
 
       let status: 'PENDING' | 'SETTLED' | 'ADVANCE' = 'SETTLED';
       if (pendingDue > 0) {
         status = 'PENDING';
-      } else if (netBalance > 0 || availableAdvance > 0) {
+      } else if (netBalance > 0) {
         status = 'ADVANCE';
       }
 

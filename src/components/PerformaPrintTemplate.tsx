@@ -126,9 +126,6 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
   // Total Allocated Value = Subtotal - Discount + Packing + Tax
   const totalAllocatedVal = Math.max(0, subtotalVal - discountAmt + packingAmt + taxAmt);
 
-  const initAdv = performa.initialAdvance !== undefined ? performa.initialAdvance : (Number(performa.advanceAmount) || 0);
-  const addlCred = performa.additionalCredits !== undefined ? performa.additionalCredits : 0;
-
   const billsTotalCases = (performa.customerBills || []).reduce(
     (acc: number, b: any) => acc + (parseFloat(String(b.caseCount || 0)) || 0),
     0
@@ -137,30 +134,6 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
     (acc: number, b: any) => acc + (parseFloat(String(b.netTotal || b.total || b.amount || 0)) || 0),
     0
   );
-
-  const totalAdvReceived = performa.totalAdvanceReceived !== undefined
-    ? performa.totalAdvanceReceived
-    : (performa.totalAvailableAmount !== undefined
-      ? performa.totalAvailableAmount
-      : (performa.ledgerTotalCredit !== undefined
-        ? performa.ledgerTotalCredit
-        : Math.max(initAdv + addlCred, initAdv)));
-
-  const usedAmt = performa.usedAmount !== undefined
-    ? performa.usedAmount
-    : (performa.ledgerTotalDebit !== undefined
-      ? performa.ledgerTotalDebit
-      : (performa.advanceUsedAmount !== undefined ? performa.advanceUsedAmount : billsTotalAmt));
-
-  const customerAdvBal = performa.balanceAmount !== undefined
-    ? performa.balanceAmount
-    : (performa.ledgerCreditBalance !== undefined
-      ? performa.ledgerCreditBalance
-      : (performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : (totalAdvReceived - usedAmt)));
-
-  const performaPendingVal = performa.performaRemainingAmount !== undefined
-    ? performa.performaRemainingAmount
-    : Math.max(0, totalAllocatedVal - totalAdvReceived);
 
   return (
     <div
@@ -319,8 +292,7 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
             <th style={{ padding: '8px 6px', textAlign: 'center', width: '35px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>#</th>
             <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Product Description</th>
             <th style={{ padding: '8px 8px', textAlign: 'left', width: '120px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Company</th>
-            <th style={{ padding: '8px 6px', textAlign: 'center', width: '70px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Cases</th>
-            <th style={{ padding: '8px 6px', textAlign: 'center', width: '70px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Remaining</th>
+            <th style={{ padding: '8px 6px', textAlign: 'center', width: '75px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Total Cases</th>
             <th style={{ padding: '8px 8px', textAlign: 'right', width: '80px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Rate (₹)</th>
             <th style={{ padding: '8px 6px', textAlign: 'center', width: '55px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Units</th>
             <th style={{ padding: '8px 10px', textAlign: 'right', width: '105px', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', border: '1px solid #0F172A' }}>Amount (₹)</th>
@@ -329,7 +301,7 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
         <tbody>
           {(performa.products || []).length === 0 ? (
             <tr>
-              <td colSpan={8} style={{ padding: '16px', textAlign: 'center', color: '#64748B', border: '1px solid #CBD5E1' }}>
+              <td colSpan={7} style={{ padding: '16px', textAlign: 'center', color: '#64748B', border: '1px solid #CBD5E1' }}>
                 No products allocated.
               </td>
             </tr>
@@ -350,9 +322,6 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
                   </td>
                   <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: 800, color: '#0F172A', border: '1px solid #CBD5E1' }}>
                     {item.requiredCases}
-                  </td>
-                  <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: 700, color: '#0B4DB7', border: '1px solid #CBD5E1' }}>
-                    {item.remainingCases !== undefined ? item.remainingCases : item.requiredCases}
                   </td>
                   <td style={{ padding: '7px 8px', textAlign: 'right', border: '1px solid #CBD5E1', color: '#334155' }}>₹ {formatCurrency(item.rate)}</td>
                   <td style={{ padding: '7px 6px', textAlign: 'center', border: '1px solid #CBD5E1', color: '#64748B' }}>{item.pktPerUnit || 1}</td>
@@ -384,13 +353,13 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
             </div>
           )}
           <div style={{ lineHeight: '1.4' }}>
-            • This quotation reserves product requirement allocation. Billed cases will automatically deduct from available customer advance balance.
+            • This quotation reserves product requirement allocation.
           </div>
         </div>
 
         <div style={{ width: '44%', fontSize: '12px', border: '1px solid #CBD5E1', borderRadius: '6px', backgroundColor: '#F8FAFC', padding: '10px 14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ color: '#475569' }}>Total Required Cases:</span>
+            <span style={{ color: '#475569' }}>Total Cases:</span>
             <strong style={{ color: '#0F172A' }}>{performa.totalRequiredCases}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
@@ -415,71 +384,6 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
               <strong style={{ fontWeight: 700, color: '#0F172A' }}>+ ₹ {formatCurrency(taxAmt)}</strong>
             </div>
           )}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', paddingTop: '4px', borderTop: '1px dashed #CBD5E1' }}>
-            <span style={{ color: '#0F172A', fontWeight: 700 }}>Total Value:</span>
-            <strong style={{ color: '#0B4DB7', fontWeight: 800, fontSize: '13.5px' }}>₹ {formatCurrency(totalAllocatedVal)}</strong>
-          </div>
-          <div style={{ height: '1px', backgroundColor: '#CBD5E1', margin: '6px 0' }} />
-          {/* Customer Advance & Payments Breakdown */}
-          {initAdv > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', color: '#475569' }}>
-              <span>Initial Advance:</span>
-              <strong style={{ fontWeight: 600 }}>₹ {formatCurrency(initAdv)}</strong>
-            </div>
-          )}
-
-          {addlCred > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', color: '#1E40AF' }}>
-              <span>Addl Credits / Payments:</span>
-              <strong style={{ fontWeight: 600 }}>+ ₹ {formatCurrency(addlCred)}</strong>
-            </div>
-          )}
-
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginBottom: '4px',
-              paddingTop: '3px',
-              borderTop: (initAdv > 0 && addlCred > 0) ? '1px dashed #CBD5E1' : undefined,
-              color: '#0B4DB7',
-            }}
-          >
-            <span style={{ fontWeight: 700 }}>Total Credit / Advance:</span>
-            <strong style={{ fontWeight: 800 }}>₹ {formatCurrency(totalAdvReceived)}</strong>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginBottom: '4px',
-              color: usedAmt > 0 ? '#DC2626' : '#475569',
-            }}
-          >
-            <span style={{ fontWeight: 600 }}>Particulars Purchases (Debit):</span>
-            <strong style={{ fontWeight: 700 }}>- ₹ {formatCurrency(usedAmt)}</strong>
-          </div>
-
-          {/* Performa Pending Amount */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              paddingTop: '4px',
-              borderTop: '1px dashed #CBD5E1',
-              marginTop: '3px',
-              fontSize: '11.5px',
-              color: performaPendingVal > 0 ? '#B91C1C' : '#15803D',
-            }}
-          >
-            <span style={{ fontWeight: 700 }}>Performa Balance to Pay:</span>
-            <strong style={{ fontWeight: 800 }}>
-              {performaPendingVal > 0 ? `₹ ${formatCurrency(performaPendingVal)}` : 'NIL (Fully Paid)'}
-            </strong>
-          </div>
-
-          {/* Remaining Advance Balance */}
           <div
             style={{
               display: 'flex',
@@ -488,13 +392,11 @@ export const PerformaPrintTemplate: React.FC<PerformaPrintTemplateProps> = ({ pe
               borderTop: '2px solid #0B4DB7',
               marginTop: '4px',
               fontSize: '13px',
-              color: customerAdvBal >= 0 ? '#166534' : '#DC2626',
+              color: '#0B4DB7',
             }}
           >
-            <span style={{ fontWeight: 800 }}>
-              {customerAdvBal >= 0 ? 'Available Advance Balance:' : 'Net Pending Debit:'}
-            </span>
-            <strong style={{ fontWeight: 900 }}>₹ {formatCurrency(Math.abs(customerAdvBal))}</strong>
+            <span style={{ fontWeight: 800 }}>Total Value:</span>
+            <strong style={{ fontWeight: 900, fontSize: '14px' }}>₹ {formatCurrency(totalAllocatedVal)}</strong>
           </div>
         </div>
       </div>

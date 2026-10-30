@@ -331,8 +331,6 @@ ${itemsText || '-'}
 *Total Cases:* ${totalCases}
 *Subtotal:* ₹${subtotalVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
 ${discountAmt > 0 ? `*Discount:* ${performa.discount ? `${performa.discount}${String(performa.discount).includes('%') ? '' : '%'}` : ''} (-₹${discountAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })})\n` : ''}${packingAmt > 0 ? `*Packing:* ${performa.packing ? `${performa.packing}${String(performa.packing).includes('%') ? '' : '%'}` : ''} (+₹${packingAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })})\n` : ''}${taxAmt > 0 ? `*Tax:* ₹${taxAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` : ''}*TOTAL ALLOCATED VALUE:* ₹${Number(totalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-*Advance Received:* ₹${Number(performa.advanceAmount || performa.totalAvailableAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}${((performa.advanceUsedAmount || performa.usedAmount) > 0) ? `\n*Advance Consumed:* -₹${Number(performa.advanceUsedAmount || performa.usedAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : ''}
-*Remaining Advance:* ₹${Number(performa.remainingAdvanceAmount ?? performa.remainingAmount ?? Math.max(0, (performa.advanceAmount || performa.totalAvailableAmount || 0) - (performa.advanceUsedAmount || performa.usedAmount || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
 ----------------------------------------
 *Dheeksha Trade*`;
 

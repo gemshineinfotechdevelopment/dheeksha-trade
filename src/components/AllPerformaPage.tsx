@@ -40,7 +40,6 @@ import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceWalletRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
-import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded';
 import ModeEditOutlineRoundedIcon from '@mui/icons-material/ModeEditOutlineRounded';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { PerformasApi, CustomersApi, CompaniesApi, ProductsApi } from '../services/api';
@@ -68,7 +67,7 @@ interface AllPerformaPageProps {
   onSelectCustomerForBill?: (customerName: string, subTab?: any) => void;
 }
 
-export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, onSelectCustomerForBill }) => {
+export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, onSelectCustomerForBill: _onSelectCustomerForBill }) => {
   const [performas, setPerformas] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -95,13 +94,6 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
 
   const [selectedPerformaForPrint, setSelectedPerformaForPrint] = useState<PerformaPrintData | null>(null);
   const [printModalOpen, setPrintModalOpen] = useState<boolean>(false);
-
-  // Add Advance Modal State
-  const [advanceModalOpen, setAdvanceModalOpen] = useState<boolean>(false);
-  const [targetPerformaForAdvance, setTargetPerformaForAdvance] = useState<any | null>(null);
-  const [advanceAmountInput, setAdvanceAmountInput] = useState<string>('');
-  const [advanceNotesInput, setAdvanceNotesInput] = useState<string>('');
-  const [advanceLoading, setAdvanceLoading] = useState<boolean>(false);
 
   // Edit Performa Modal State
   const [editModalOpen, setEditModalOpen] = useState<boolean>(false);
@@ -234,24 +226,13 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
       }
     }
 
-    const totalAvail = fullPerforma.totalAdvanceReceived !== undefined
-      ? fullPerforma.totalAdvanceReceived
-      : (fullPerforma.totalAvailableAmount !== undefined ? fullPerforma.totalAvailableAmount : (Number(fullPerforma.advanceAmount) || 0));
-    const usedAmt = fullPerforma.usedAmount !== undefined
-      ? fullPerforma.usedAmount
-      : (fullPerforma.advanceUsedAmount !== undefined ? fullPerforma.advanceUsedAmount : 0);
-    const remAmt = fullPerforma.remainingAdvanceAmount !== undefined
-      ? fullPerforma.remainingAdvanceAmount
-      : (fullPerforma.remainingAmount !== undefined ? fullPerforma.remainingAmount : Math.max(0, totalAvail - usedAmt));
-    const balAmt = fullPerforma.balanceAmount !== undefined
-      ? fullPerforma.balanceAmount
-      : (totalAvail - usedAmt);
-    const initAdv = fullPerforma.initialAdvance !== undefined
-      ? fullPerforma.initialAdvance
-      : (Number(fullPerforma.advanceAmount) || 0);
-    const addlCred = fullPerforma.additionalCredits !== undefined
-      ? fullPerforma.additionalCredits
-      : Math.max(0, totalAvail - initAdv);
+    const advAmt = Number(fullPerforma.advanceAmount) || 0;
+    const totalAvail = advAmt;
+    const usedAmt = 0;
+    const remAmt = advAmt;
+    const balAmt = Math.max(0, (fullPerforma.totalAllocatedAmount || 0) - advAmt);
+    const initAdv = advAmt;
+    const addlCred = 0;
     const bills = fullPerforma.customerBills || [];
 
     const printData: PerformaPrintData = {
@@ -572,42 +553,6 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
     }
   };
 
-  // Open Add Advance Dialog
-  const handleOpenAdvanceDialog = (performa: any) => {
-    setTargetPerformaForAdvance(performa);
-    setAdvanceAmountInput('');
-    setAdvanceNotesInput('');
-    setAdvanceModalOpen(true);
-  };
-
-  const handleSaveAdvance = async () => {
-    if (!targetPerformaForAdvance) return;
-    const amt = parseFloat(advanceAmountInput);
-    if (!amt || amt <= 0) {
-      setToast({ open: true, message: 'Please enter a valid amount greater than 0', severity: 'error' });
-      return;
-    }
-
-    try {
-      setAdvanceLoading(true);
-      await PerformasApi.addAdvance({
-        customerId: targetPerformaForAdvance.customerId,
-        customerName: targetPerformaForAdvance.customerSnapshot?.name,
-        performaId: targetPerformaForAdvance._id,
-        amount: amt,
-        notes: advanceNotesInput.trim() || `Additional advance for ${targetPerformaForAdvance.performaNumber}`,
-      });
-
-      setToast({ open: true, message: 'Advance added successfully!', severity: 'success' });
-      setAdvanceModalOpen(false);
-      fetchPerformas();
-    } catch (err: any) {
-      setToast({ open: true, message: err?.message || 'Failed to add advance', severity: 'error' });
-    } finally {
-      setAdvanceLoading(false);
-    }
-  };
-
   const getStatusChip = (status: string) => {
     switch (status) {
       case 'ACTIVE':
@@ -753,10 +698,10 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
           <Card elevation={0} sx={{ border: '1px solid #E2E8F0', borderRadius: '10px', backgroundColor: '#FFFFFF' }}>
             <CardContent sx={{ p: '16px !important' }}>
               <Typography sx={{ fontSize: '11.5px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-                Remaining Cases
+                Total Cases
               </Typography>
               <Typography sx={{ fontSize: '22px', fontWeight: 800, color: '#0B4DB7', mt: 0.5 }}>
-                {summary.totalRemainingCases || 0} <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>/ {summary.totalRequiredCases || 0}</span>
+                {summary.totalRequiredCases || 0}
               </Typography>
             </CardContent>
           </Card>
@@ -971,22 +916,14 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                   </TableSortLabel>
                 </TableCell>
                 <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>
-                  Initial Advance
-                </TableCell>
-                <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>
-                  Additional Credits
-                </TableCell>
-                <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>
                   <TableSortLabel
                     active={sortBy === 'advance'}
                     direction={sortBy === 'advance' ? sortOrder : 'desc'}
                     onClick={() => handleSortRequest('advance')}
                   >
-                    Total Available
+                    Advance Amount
                   </TableSortLabel>
                 </TableCell>
-                <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Used Amount</TableCell>
-                <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Remaining Advance</TableCell>
                 <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Balance to Pay</TableCell>
                 <TableCell sx={{ fontWeight: 800, textAlign: 'center', color: '#475569' }}>
                   <TableSortLabel
@@ -994,7 +931,7 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                     direction={sortBy === 'cases' ? sortOrder : 'desc'}
                     onClick={() => handleSortRequest('cases')}
                   >
-                    Cases (Req / Used / Rem)
+                    Total Cases
                   </TableSortLabel>
                 </TableCell>
                 <TableCell sx={{ fontWeight: 800, textAlign: 'center', color: '#475569' }}>Status</TableCell>
@@ -1004,25 +941,21 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={13} sx={{ textAlign: 'center', py: 6 }}>
+                  <TableCell colSpan={9} sx={{ textAlign: 'center', py: 6 }}>
                     <CircularProgress size={30} sx={{ color: '#0B4DB7' }} />
                   </TableCell>
                 </TableRow>
               ) : performas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={13} sx={{ textAlign: 'center', py: 6, color: '#94A3B8' }}>
+                  <TableCell colSpan={9} sx={{ textAlign: 'center', py: 6, color: '#94A3B8' }}>
                     No Performa records found matching the current filters.
                   </TableCell>
                 </TableRow>
               ) : (
                 performas.map((p) => {
                   const performaVal = p.totalAllocatedAmount !== undefined ? p.totalAllocatedAmount : (p.performaTotalValue || 0);
-                  const initAdv = p.initialAdvance !== undefined ? p.initialAdvance : p.advanceAmount || 0;
-                  const addlCred = p.additionalCredits !== undefined ? p.additionalCredits : 0;
-                  const totalAvail = p.totalAvailableAmount !== undefined ? p.totalAvailableAmount : p.advanceAmount || 0;
-                  const usedAmt = p.usedAmount !== undefined ? p.usedAmount : (p.advanceUsedAmount || 0);
-                  const remAmt = p.remainingAmount !== undefined ? p.remainingAmount : (p.remainingAdvanceAmount !== undefined ? p.remainingAdvanceAmount : Math.max(0, totalAvail - usedAmt));
-                  const balanceToPay = Math.max(0, performaVal - totalAvail);
+                  const advAmt = p.advanceAmount || 0;
+                  const balanceToPay = Math.max(0, performaVal - advAmt);
 
                   return (
                     <TableRow key={p._id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
@@ -1046,26 +979,14 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                         ₹{performaVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell sx={{ textAlign: 'right', fontWeight: 700, color: '#0F172A' }}>
-                        ₹{initAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: 'right', fontWeight: 700, color: addlCred > 0 ? '#0B4DB7' : '#64748B' }}>
-                        ₹{addlCred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: '#1D4ED8' }}>
-                        ₹{totalAvail.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: 'right', color: usedAmt > 0 ? '#DC2626' : '#64748B', fontWeight: 600 }}>
-                        ₹{usedAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: remAmt >= 0 ? '#166534' : '#DC2626' }}>
-                        ₹{remAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        ₹{advAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell sx={{ textAlign: 'right', fontWeight: 800, color: balanceToPay > 0 ? '#DC2626' : '#15803D' }}>
                         ₹{balanceToPay.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell sx={{ textAlign: 'center' }}>
-                        <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
-                          {p.totalRequiredCases || 0} / <span style={{ color: p.totalUsedCases > 0 ? '#DC2626' : '#64748B' }}>{p.totalUsedCases || 0}</span> / <span style={{ color: '#166534' }}>{p.totalRemainingCases || 0}</span>
+                        <Typography sx={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>
+                          {p.totalRequiredCases || p.totalCases || 0}
                         </Typography>
                       </TableCell>
                       <TableCell sx={{ textAlign: 'center' }}>{getStatusChip(p.status)}</TableCell>
@@ -1108,24 +1029,6 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                           <Tooltip title="Print Performa">
                             <IconButton size="small" onClick={() => handleOpenPrintModal(p)} sx={{ color: '#475569' }}>
                               <PrintOutlinedIcon sx={{ fontSize: 18 }} />
-                            </IconButton>
-                          </Tooltip>
-
-                          {onSelectCustomerForBill && p.status !== 'CANCELLED' && (
-                            <Tooltip title="Create Bill from this Performa">
-                              <IconButton
-                                size="small"
-                                onClick={() => onSelectCustomerForBill(p.customerSnapshot?.name, 'Create Particular')}
-                                sx={{ color: '#7C3AED' }}
-                              >
-                                <ReceiptLongRoundedIcon sx={{ fontSize: 18 }} />
-                              </IconButton>
-                            </Tooltip>
-                          )}
-
-                          <Tooltip title="Add Customer Advance">
-                            <IconButton size="small" onClick={() => handleOpenAdvanceDialog(p)} sx={{ color: '#16A34A' }}>
-                              <AccountBalanceWalletRoundedIcon sx={{ fontSize: 18 }} />
                             </IconButton>
                           </Tooltip>
 
@@ -1234,34 +1137,6 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                     <span style={{ fontSize: '12.5px', color: '#0B4DB7', fontWeight: 800 }}>Performa Total Value:</span>
                     <strong style={{ color: '#0B4DB7', fontSize: '14px', fontWeight: 900 }}>₹{(selectedPerformaForView.totalAllocatedAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                   </Box>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.8, fontSize: '12px', mb: 0.5, pt: 0.5, borderTop: '1px dashed #EEF2F6' }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748B' }}>Initial Advance:</span>
-                      <strong>₹{(selectedPerformaForView.initialAdvance ?? selectedPerformaForView.advanceAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748B' }}>Additional Credits:</span>
-                      <strong style={{ color: (selectedPerformaForView.additionalCredits || 0) > 0 ? '#0B4DB7' : undefined }}>+ ₹{(selectedPerformaForView.additionalCredits || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#1E40AF', fontWeight: 700 }}>Total Advance:</span>
-                      <strong style={{ color: '#1E40AF' }}>₹{(selectedPerformaForView.totalAdvanceReceived ?? ((selectedPerformaForView.advanceAmount || 0) + (selectedPerformaForView.additionalCredits || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#991B1B', fontWeight: 700 }}>Billed (Used):</span>
-                      <strong style={{ color: '#DC2626' }}>- ₹{(selectedPerformaForView.advanceUsedAmount ?? selectedPerformaForView.totalUsedAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-                    </Box>
-                  </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5, pt: 0.5, borderTop: '1px dashed #EEF2F6' }}>
-                    <span style={{ fontSize: '12.5px', color: '#166534', fontWeight: 700 }}>Available Advance Balance:</span>
-                    <strong style={{ color: '#16A34A', fontSize: '13.5px' }}>₹{(selectedPerformaForView.remainingAdvanceAmount ?? selectedPerformaForView.financialSummary?.availableAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-                  </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <span style={{ fontSize: '12.5px', color: '#475569', fontWeight: 800 }}>Balance to Pay:</span>
-                    <strong style={{ color: Math.max(0, (selectedPerformaForView.totalAllocatedAmount || 0) - (selectedPerformaForView.totalAdvanceReceived ?? (selectedPerformaForView.advanceAmount || 0))) > 0 ? '#DC2626' : '#166534', fontSize: '13.5px', fontWeight: 800 }}>
-                      ₹{Math.max(0, (selectedPerformaForView.totalAllocatedAmount || 0) - (selectedPerformaForView.totalAdvanceReceived ?? (selectedPerformaForView.advanceAmount || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </strong>
-                  </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5, pt: 0.5, borderTop: '1px solid #EEF2F6' }}>
                     <span style={{ fontSize: '12.5px', color: '#475569' }}>Current Status:</span>
                     {getStatusChip(selectedPerformaForView.status)}
@@ -1271,16 +1146,14 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
 
               {/* Product Allocation Breakdown */}
               <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', mb: 1.5 }}>
-                Allocated Products & Consumption
+                Allocated Products
               </Typography>
               <TableContainer sx={{ border: '1px solid #E2E8F0', borderRadius: '8px', mb: 3, backgroundColor: '#FFFFFF' }}>
                 <Table size="small">
                   <TableHead sx={{ backgroundColor: '#F1F5F9' }}>
                     <TableRow>
                       <TableCell sx={{ fontWeight: 800 }}>Product</TableCell>
-                      <TableCell sx={{ fontWeight: 800, textAlign: 'center' }}>Required</TableCell>
-                      <TableCell sx={{ fontWeight: 800, textAlign: 'center' }}>Used (Billed)</TableCell>
-                      <TableCell sx={{ fontWeight: 800, textAlign: 'center' }}>Remaining</TableCell>
+                      <TableCell sx={{ fontWeight: 800, textAlign: 'center' }}>Total Cases</TableCell>
                       <TableCell sx={{ fontWeight: 800, textAlign: 'right' }}>Rate (₹)</TableCell>
                       <TableCell sx={{ fontWeight: 800, textAlign: 'right' }}>Allocated Value</TableCell>
                     </TableRow>
@@ -1294,11 +1167,7 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                             <div style={{ fontSize: '11px', color: '#64748B' }}>Code: {prod.productSnapshot.productCode}</div>
                           )}
                         </TableCell>
-                        <TableCell sx={{ textAlign: 'center', fontWeight: 700 }}>{prod.requiredCases}</TableCell>
-                        <TableCell sx={{ textAlign: 'center', color: '#0B4DB7', fontWeight: 700 }}>{prod.usedCases}</TableCell>
-                        <TableCell sx={{ textAlign: 'center', fontWeight: 700, color: prod.remainingCases > 0 ? '#166534' : '#64748B' }}>
-                          {prod.remainingCases}
-                        </TableCell>
+                        <TableCell sx={{ textAlign: 'center', fontWeight: 800, color: '#0F172A' }}>{prod.requiredCases}</TableCell>
                         <TableCell sx={{ textAlign: 'right' }}>₹{prod.rate?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell sx={{ textAlign: 'right', fontWeight: 700 }}>₹{prod.allocatedAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
                       </TableRow>
@@ -1451,7 +1320,7 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
               Edit Performa - {editPerformaNumber}
             </Typography>
             <Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>
-              Modify brand/company, customer information, status, advance amount, and product quantities
+              Modify brand/company, customer information, status, and product quantities
             </Typography>
           </Box>
           <IconButton onClick={() => !editLoading && setEditModalOpen(false)} sx={{ color: '#FFFFFF' }}>
@@ -1471,7 +1340,7 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                 <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', mb: 2 }}>
                   Performa Information
                 </Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1.2fr 1fr 1fr 1fr 1fr' }, gap: 2 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1.2fr 1.2fr 1fr 1fr' }, gap: 2 }}>
                   <Autocomplete
                     freeSolo
                     options={companies.map((c) => c.name).filter(Boolean)}
@@ -1521,15 +1390,6 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
                     value={editDate}
                     onChange={(e) => setEditDate(e.target.value)}
                     slotProps={{ inputLabel: { shrink: true } }}
-                    fullWidth
-                  />
-
-                  <TextField
-                    label="Advance Amount (₹)"
-                    type="number"
-                    size="small"
-                    value={editAdvanceAmount}
-                    onChange={(e) => setEditAdvanceAmount(e.target.value)}
                     fullWidth
                   />
 
@@ -1809,57 +1669,6 @@ export const AllPerformaPage: FC<AllPerformaPageProps> = ({ onAddNewPerforma, on
             sx={{ backgroundColor: '#0B4DB7', textTransform: 'none', fontWeight: 700, px: 3 }}
           >
             {editLoading ? 'Saving...' : 'Save Changes'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Add Advance Dialog */}
-      <Dialog
-        open={advanceModalOpen}
-        onClose={() => setAdvanceModalOpen(false)}
-        maxWidth="xs"
-        fullWidth
-        sx={{ '& .MuiDialog-paper': { borderRadius: '12px' } }}
-      >
-        <DialogTitle sx={{ fontWeight: 800, color: '#0F172A', pb: 1 }}>
-          Add Customer Advance
-        </DialogTitle>
-        <DialogContent sx={{ pt: '10px !important' }}>
-          <Typography sx={{ fontSize: '13px', color: '#64748B', mb: 2 }}>
-            Deposit advance against <strong>{targetPerformaForAdvance?.customerSnapshot?.name}</strong> ({targetPerformaForAdvance?.performaNumber})
-          </Typography>
-          <TextField
-            label="Advance Amount (₹)"
-            fullWidth
-            size="small"
-            type="number"
-            value={advanceAmountInput}
-            onChange={(e) => setAdvanceAmountInput(e.target.value)}
-            placeholder="e.g. 500000"
-            sx={{ mb: 2 }}
-            autoFocus
-          />
-          <TextField
-            label="Notes / Reference"
-            fullWidth
-            size="small"
-            value={advanceNotesInput}
-            onChange={(e) => setAdvanceNotesInput(e.target.value)}
-            placeholder="e.g. NEFT transfer Ref #12345"
-          />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setAdvanceModalOpen(false)} sx={{ textTransform: 'none', color: '#64748B' }}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            disableElevation
-            onClick={handleSaveAdvance}
-            disabled={advanceLoading || !advanceAmountInput}
-            sx={{ backgroundColor: '#0B4DB7', textTransform: 'none', fontWeight: 700 }}
-          >
-            {advanceLoading ? 'Saving...' : 'Add Advance'}
           </Button>
         </DialogActions>
       </Dialog>

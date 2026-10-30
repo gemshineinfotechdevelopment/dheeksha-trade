@@ -46,7 +46,7 @@ import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import BusinessRoundedIcon from '@mui/icons-material/BusinessRounded';
 import ListAltRoundedIcon from '@mui/icons-material/ListAltRounded';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
-import { CustomersApi, ProductsApi, CompaniesApi, PerformasApi, AccountsApi } from '../services/api';
+import { CustomersApi, ProductsApi, CompaniesApi, PerformasApi } from '../services/api';
 import { PerformaPrintModal } from './PerformaPrintModal';
 import type { PerformaPrintData } from './PerformaPrintTemplate';
 import { sharePerformaOnWhatsApp } from '../utils/whatsappUtils';
@@ -118,7 +118,6 @@ export const PerformaPage: FC<PerformaPageProps> = ({
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
-  const [depositAdvance, setDepositAdvance] = useState<string>('0');
   const [notes, setNotes] = useState<string>('');
   const [discount, setDiscount] = useState<string>('');
   const [packing, setPacking] = useState<string>('');
@@ -167,14 +166,6 @@ export const PerformaPage: FC<PerformaPageProps> = ({
   const [editProducts, setEditProducts] = useState<EditProductItem[]>([]);
 
 
-
-  // Add Advance Only Modal State
-  const [advanceOnlyModalOpen, setAdvanceOnlyModalOpen] = useState(false);
-  const [advanceOnlyAmount, setAdvanceOnlyAmount] = useState('');
-  const [advanceOnlyDate, setAdvanceOnlyDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [advanceOnlyPaymentMode, setAdvanceOnlyPaymentMode] = useState('Bank');
-  const [advanceOnlyNotes, setAdvanceOnlyNotes] = useState('');
-  const [advanceOnlyLoading, setAdvanceOnlyLoading] = useState(false);
 
   // Print Modal & Toast
   const [printModalOpen, setPrintModalOpen] = useState(false);
@@ -442,10 +433,6 @@ export const PerformaPage: FC<PerformaPageProps> = ({
     return Number(net.toFixed(2));
   }, [subtotalAllocatedValue, discountVal, packingVal, taxVal]);
 
-  const currentEnteredAdvance = useMemo(() => {
-    return parseFloat(String(depositAdvance).replace(/,/g, '')) || 0;
-  }, [depositAdvance]);
-
   const totalReceivedAmount = useMemo(() => {
     if (customerPerformaSummary && typeof customerPerformaSummary.ledgerTotalCredit === 'number') {
       return customerPerformaSummary.ledgerTotalCredit;
@@ -473,91 +460,9 @@ export const PerformaPage: FC<PerformaPageProps> = ({
     return totalReceivedAmount - purchaseAmount;
   }, [customerPerformaSummary, totalReceivedAmount, purchaseAmount]);
 
-  const existingAvailableAdvance = useMemo(() => {
-    return balanceAmount;
-  }, [balanceAmount]);
-
-  // Add Advance Only Handler
-  const handleAddAdvanceOnly = async () => {
-    if (!selectedCustomer) {
-      setToast({ open: true, message: 'Please select a customer first', severity: 'error' });
-      return;
-    }
-    const amt = parseFloat(advanceOnlyAmount.replace(/,/g, ''));
-    if (!amt || amt <= 0) {
-      setToast({ open: true, message: 'Please enter a valid amount greater than 0', severity: 'error' });
-      return;
-    }
-    try {
-      setAdvanceOnlyLoading(true);
-      await AccountsApi.addCredit({
-        customerId: selectedCustomer._id,
-        customerName: selectedCustomer.name,
-        companyName: selectedCustomer.companyName || '',
-        creditAmount: amt.toFixed(2),
-        date: advanceOnlyDate,
-        paymentMode: advanceOnlyPaymentMode,
-        notes: advanceOnlyNotes.trim() || 'Advance payment received',
-      });
-      setToast({ open: true, message: `₹${amt.toLocaleString('en-IN')} advance added for ${selectedCustomer.name}!`, severity: 'success' });
-      setAdvanceOnlyModalOpen(false);
-      setAdvanceOnlyAmount('');
-      setAdvanceOnlyNotes('');
-      // Refresh customer summary
-      fetchCustomerPerformaData(selectedCustomer);
-    } catch (err: any) {
-      setToast({ open: true, message: err?.message || 'Failed to add advance', severity: 'error' });
-    } finally {
-      setAdvanceOnlyLoading(false);
-    }
-  };
-
-  // Direct deposit from the "Deposit New Advance" input field (no products required)
-  const handleDepositAdvanceOnlyFromInput = async () => {
-    if (!selectedCustomer) {
-      setToast({ open: true, message: 'Please select a customer first', severity: 'error' });
-      return;
-    }
-    const amt = parseFloat(String(depositAdvance).replace(/,/g, ''));
-    if (!amt || amt <= 0) {
-      // If amount not entered in input, open modal so user can enter it
-      setAdvanceOnlyAmount('');
-      setAdvanceOnlyDate(date || new Date().toISOString().split('T')[0]);
-      setAdvanceOnlyPaymentMode('Bank');
-      setAdvanceOnlyNotes('');
-      setAdvanceOnlyModalOpen(true);
-      return;
-    }
-    try {
-      setAdvanceOnlyLoading(true);
-      await AccountsApi.addCredit({
-        customerId: selectedCustomer._id,
-        customerName: selectedCustomer.name,
-        companyName: selectedCustomer.companyName || '',
-        creditAmount: amt.toFixed(2),
-        date: date || new Date().toISOString().split('T')[0],
-        paymentMode: 'Bank',
-        notes: notes.trim() || 'Advance deposit received',
-      });
-      setToast({
-        open: true,
-        message: `₹${amt.toLocaleString('en-IN')} advance credited successfully for ${selectedCustomer.name}!`,
-        severity: 'success',
-      });
-      setDepositAdvance('0');
-      // Refresh customer summary & ledger
-      fetchCustomerPerformaData(selectedCustomer);
-    } catch (err: any) {
-      setToast({ open: true, message: err?.message || 'Failed to add advance', severity: 'error' });
-    } finally {
-      setAdvanceOnlyLoading(false);
-    }
-  };
-
   // Reset Form
   const handleReset = async () => {
     setProductRows([]);
-    setDepositAdvance('0');
     setNotes('');
     setDiscount('');
     setPacking('');
@@ -607,7 +512,7 @@ export const PerformaPage: FC<PerformaPageProps> = ({
           address: selectedCustomer.address || '',
           gst: selectedCustomer.gst || '',
         },
-        advanceAmount: currentEnteredAdvance,
+        advanceAmount: 0,
         date: date,
         notes: notes.trim(),
         discount: discount || '0',
@@ -683,24 +588,13 @@ export const PerformaPage: FC<PerformaPageProps> = ({
       }
     }
 
-    const totalAvail = fullPerforma.totalAdvanceReceived !== undefined
-      ? fullPerforma.totalAdvanceReceived
-      : (fullPerforma.totalAvailableAmount !== undefined ? fullPerforma.totalAvailableAmount : (Number(fullPerforma.advanceAmount) || 0));
-    const usedAmt = fullPerforma.usedAmount !== undefined
-      ? fullPerforma.usedAmount
-      : (fullPerforma.advanceUsedAmount !== undefined ? fullPerforma.advanceUsedAmount : 0);
-    const remAmt = fullPerforma.remainingAdvanceAmount !== undefined
-      ? fullPerforma.remainingAdvanceAmount
-      : (fullPerforma.remainingAmount !== undefined ? fullPerforma.remainingAmount : Math.max(0, totalAvail - usedAmt));
-    const balAmt = fullPerforma.balanceAmount !== undefined
-      ? fullPerforma.balanceAmount
-      : (totalAvail - usedAmt);
-    const initAdv = fullPerforma.initialAdvance !== undefined
-      ? fullPerforma.initialAdvance
-      : (Number(fullPerforma.advanceAmount) || 0);
-    const addlCred = fullPerforma.additionalCredits !== undefined
-      ? fullPerforma.additionalCredits
-      : Math.max(0, totalAvail - initAdv);
+    const advAmt = Number(fullPerforma.advanceAmount) || 0;
+    const totalAvail = advAmt;
+    const usedAmt = 0;
+    const remAmt = advAmt;
+    const balAmt = Math.max(0, (fullPerforma.totalAllocatedAmount || 0) - advAmt);
+    const initAdv = advAmt;
+    const addlCred = 0;
     const bills = fullPerforma.customerBills || [];
 
     const printData: PerformaPrintData = {
@@ -1092,47 +986,22 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                 }}
               />
               {selectedCustomer && (
-                <>
-                  <Button
-                    variant="contained"
-                    disableElevation
-                    onClick={() => {
-                      setAdvanceOnlyAmount('');
-                      setAdvanceOnlyDate(new Date().toISOString().split('T')[0]);
-                      setAdvanceOnlyPaymentMode('Bank');
-                      setAdvanceOnlyNotes('');
-                      setAdvanceOnlyModalOpen(true);
-                    }}
-                    startIcon={<AccountBalanceWalletRoundedIcon />}
-                    sx={{
-                      backgroundColor: '#16A34A',
-                      color: '#FFFFFF',
-                      textTransform: 'none',
-                      fontWeight: 700,
-                      fontSize: '13px',
-                      borderRadius: '8px',
-                      '&:hover': { backgroundColor: '#15803D' },
-                    }}
-                  >
-                    Add Advance Only
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={() => setActiveSubTab('Customer Performa List')}
-                    startIcon={<ListAltRoundedIcon />}
-                    sx={{
-                      borderColor: '#0B4DB7',
-                      color: '#0B4DB7',
-                      textTransform: 'none',
-                      fontWeight: 700,
-                      fontSize: '13px',
-                      borderRadius: '8px',
-                      '&:hover': { backgroundColor: '#EFF6FF' },
-                    }}
-                  >
-                    View Customer's Performas
-                  </Button>
-                </>
+                <Button
+                  variant="outlined"
+                  onClick={() => setActiveSubTab('Customer Performa List')}
+                  startIcon={<ListAltRoundedIcon />}
+                  sx={{
+                    borderColor: '#0B4DB7',
+                    color: '#0B4DB7',
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    borderRadius: '8px',
+                    '&:hover': { backgroundColor: '#EFF6FF' },
+                  }}
+                >
+                  View Customer's Performas
+                </Button>
               )}
               {onNavigateAllPerforma && (
                 <Button
@@ -1322,132 +1191,17 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                 )}
               </Box>
 
-              {/* New Advance Deposit Input */}
-              <Box sx={{ pt: 1.5, borderTop: '1px solid #EEF2F6' }}>
-                {existingAvailableAdvance > 0 && (
-                  <Box sx={{ mb: 1.5, p: 1, backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Typography sx={{ fontSize: '11.5px', color: '#166534', fontWeight: 600 }}>
-                      💡 Customer has <strong>₹{existingAvailableAdvance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> available credit / advance.
-                    </Typography>
-                    <Button
-                      size="small"
-                      variant="text"
-                      onClick={() => setDepositAdvance(String(existingAvailableAdvance))}
-                      sx={{ fontSize: '11px', textTransform: 'none', fontWeight: 700, color: '#15803D', py: 0 }}
-                    >
-                      Fill ₹{existingAvailableAdvance.toLocaleString('en-IN')}
-                    </Button>
-                  </Box>
-                )}
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                  <TextField
-                    label="Deposit New Advance (₹)"
-                    placeholder="e.g. 200000"
-                    size="small"
-                    value={depositAdvance}
-                    onChange={(e) => setDepositAdvance(e.target.value)}
-                    type="number"
-                    fullWidth
-                    helperText="Enter advance amount. Click 'Add Advance Only' below to credit directly, OR add products & click 'Save & Generate Performa' to combine both."
-                  />
-                  <TextField
-                    label="Performa Date"
-                    type="date"
-                    size="small"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    sx={{ width: '180px' }}
-                    slotProps={{ inputLabel: { shrink: true } }}
-                  />
-                </Box>
-
-                {/* Direct Action Button below Deposit New Advance */}
-                <Box
-                  sx={{
-                    mt: 1.5,
-                    p: 1.5,
-                    borderRadius: '8px',
-                    backgroundColor: '#F8FAFC',
-                    border: '1px solid #E2E8F0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: 1.5,
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <AccountBalanceWalletRoundedIcon sx={{ fontSize: 20, color: '#16A34A' }} />
-                    <Box>
-                      <Typography sx={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>
-                        Advance Only Deposit (Without Products)
-                      </Typography>
-                      <Typography sx={{ fontSize: '11px', color: '#64748B' }}>
-                        If customer gave advance only, credit it directly without adding products to performa.
-                      </Typography>
-                    </Box>
-                  </Box>
-
-                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      disableElevation
-                      disabled={!selectedCustomer || advanceOnlyLoading}
-                      onClick={handleDepositAdvanceOnlyFromInput}
-                      startIcon={
-                        advanceOnlyLoading ? (
-                          <CircularProgress size={14} sx={{ color: '#FFFFFF' }} />
-                        ) : (
-                          <AccountBalanceWalletRoundedIcon sx={{ fontSize: 16 }} />
-                        )
-                      }
-                      sx={{
-                        backgroundColor: '#16A34A',
-                        color: '#FFFFFF',
-                        textTransform: 'none',
-                        fontWeight: 700,
-                        fontSize: '12.5px',
-                        borderRadius: '8px',
-                        px: 2.2,
-                        py: 0.8,
-                        '&:hover': { backgroundColor: '#15803D' },
-                        '&:disabled': { backgroundColor: '#E2E8F0', color: '#94A3B8' },
-                      }}
-                    >
-                      {advanceOnlyLoading
-                        ? 'Adding...'
-                        : depositAdvance && parseFloat(depositAdvance) > 0
-                        ? `Add Advance Only (₹${parseFloat(depositAdvance).toLocaleString('en-IN')})`
-                        : 'Add Advance Only'}
-                    </Button>
-
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      disabled={!selectedCustomer || advanceOnlyLoading}
-                      onClick={() => {
-                        setAdvanceOnlyAmount(depositAdvance && parseFloat(depositAdvance) > 0 ? depositAdvance : '');
-                        setAdvanceOnlyDate(date || new Date().toISOString().split('T')[0]);
-                        setAdvanceOnlyPaymentMode('Bank');
-                        setAdvanceOnlyNotes('');
-                        setAdvanceOnlyModalOpen(true);
-                      }}
-                      sx={{
-                        borderColor: '#CBD5E1',
-                        color: '#475569',
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        fontSize: '11.5px',
-                        borderRadius: '8px',
-                        py: 0.8,
-                        '&:hover': { backgroundColor: '#F1F5F9', borderColor: '#94A3B8' },
-                      }}
-                    >
-                      More Options...
-                    </Button>
-                  </Box>
-                </Box>
+              {/* Performa Date */}
+              <Box sx={{ pt: 2, borderTop: '1px solid #EEF2F6', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+                <TextField
+                  label="Performa Date"
+                  type="date"
+                  size="small"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  sx={{ width: { xs: '100%', sm: '220px' } }}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                />
               </Box>
             </Paper>
           </Box>
@@ -2083,30 +1837,8 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                     <Typography sx={{ fontSize: '11px', color: '#0B4DB7', fontWeight: 800, textTransform: 'uppercase' }}>
                       Performa Total
                     </Typography>
-                    <Typography sx={{ fontSize: '18px', fontWeight: 900, color: '#0B4DB7' }}>
+                    <Typography sx={{ fontSize: '20px', fontWeight: 900, color: '#0B4DB7' }}>
                       ₹{finalTotalAllocatedValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </Typography>
-                  </Box>
-
-                  <Box sx={{ height: '28px', width: '1px', backgroundColor: '#CBD5E1', display: { xs: 'none', sm: 'block' } }} />
-
-                  <Box>
-                    <Typography sx={{ fontSize: '11px', color: '#166534', fontWeight: 800, textTransform: 'uppercase' }}>
-                      Advance Amount
-                    </Typography>
-                    <Typography sx={{ fontSize: '18px', fontWeight: 900, color: '#166534' }}>
-                      - ₹{currentEnteredAdvance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </Typography>
-                  </Box>
-
-                  <Box sx={{ height: '28px', width: '1px', backgroundColor: '#CBD5E1', display: { xs: 'none', sm: 'block' } }} />
-
-                  <Box>
-                    <Typography sx={{ fontSize: '11px', color: (finalTotalAllocatedValue - currentEnteredAdvance) > 0 ? '#DC2626' : '#15803D', fontWeight: 800, textTransform: 'uppercase' }}>
-                      {(finalTotalAllocatedValue - currentEnteredAdvance) >= 0 ? 'Remaining to Pay' : 'Excess Advance'}
-                    </Typography>
-                    <Typography sx={{ fontSize: '20px', fontWeight: 900, color: (finalTotalAllocatedValue - currentEnteredAdvance) > 0 ? '#DC2626' : '#15803D' }}>
-                      ₹{Math.abs(finalTotalAllocatedValue - currentEnteredAdvance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </Typography>
                   </Box>
                 </Box>
@@ -2155,152 +1887,6 @@ export const PerformaPage: FC<PerformaPageProps> = ({
           </Paper>
         </Box>
       )}
-
-      {/* Add Advance Only Modal */}
-      <Dialog
-        open={advanceOnlyModalOpen}
-        onClose={() => !advanceOnlyLoading && setAdvanceOnlyModalOpen(false)}
-        maxWidth="xs"
-        fullWidth
-        sx={{ '& .MuiDialog-paper': { borderRadius: '14px' } }}
-      >
-        <DialogTitle
-          sx={{
-            backgroundColor: '#0F172A',
-            color: '#FFFFFF',
-            py: 2,
-            px: 3,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <Box>
-            <Typography sx={{ fontWeight: 800, fontSize: '16px', display: 'flex', alignItems: 'center', gap: 1 }}>
-              <AccountBalanceWalletRoundedIcon sx={{ fontSize: 20, color: '#4ADE80' }} />
-              Add Advance
-            </Typography>
-            <Typography sx={{ fontSize: '12px', color: '#94A3B8', mt: 0.3 }}>
-              {selectedCustomer?.name} — credit without performa products
-            </Typography>
-          </Box>
-          <IconButton onClick={() => setAdvanceOnlyModalOpen(false)} disabled={advanceOnlyLoading} sx={{ color: '#94A3B8', p: 0.5 }}>
-            <CloseRoundedIcon sx={{ fontSize: 20 }} />
-          </IconButton>
-        </DialogTitle>
-
-        <DialogContent sx={{ pt: 3, pb: 1, px: 3, backgroundColor: '#F8FAFC' }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-            {/* Amount */}
-            <TextField
-              label="Advance Amount (₹)"
-              placeholder="e.g. 250000"
-              type="number"
-              size="small"
-              fullWidth
-              value={advanceOnlyAmount}
-              onChange={(e) => setAdvanceOnlyAmount(e.target.value)}
-              autoFocus
-              slotProps={{
-                input: {
-                  startAdornment: <InputAdornment position="start"><Typography sx={{ fontWeight: 700, color: '#16A34A' }}>₹</Typography></InputAdornment>,
-                },
-              }}
-              sx={{ '& .MuiOutlinedInput-root': { backgroundColor: '#FFFFFF' } }}
-            />
-
-            {/* Date */}
-            <TextField
-              label="Date"
-              type="date"
-              size="small"
-              fullWidth
-              value={advanceOnlyDate}
-              onChange={(e) => setAdvanceOnlyDate(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ '& .MuiOutlinedInput-root': { backgroundColor: '#FFFFFF' } }}
-            />
-
-            {/* Payment Mode */}
-            <FormControl size="small" fullWidth>
-              <InputLabel>Payment Mode</InputLabel>
-              <Select
-                label="Payment Mode"
-                value={advanceOnlyPaymentMode}
-                onChange={(e) => setAdvanceOnlyPaymentMode(e.target.value)}
-                sx={{ backgroundColor: '#FFFFFF' }}
-              >
-                {['Bank', 'Cash', 'UPI', 'Cheque', 'NEFT', 'RTGS', 'Other'].map((m) => (
-                  <MenuItem key={m} value={m}>{m}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            {/* Notes */}
-            <TextField
-              label="Notes (Optional)"
-              placeholder="e.g. Initial deposit, season advance..."
-              size="small"
-              fullWidth
-              multiline
-              rows={2}
-              value={advanceOnlyNotes}
-              onChange={(e) => setAdvanceOnlyNotes(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { backgroundColor: '#FFFFFF' } }}
-            />
-
-            {/* Preview */}
-            {advanceOnlyAmount && parseFloat(advanceOnlyAmount) > 0 && (
-              <Box
-                sx={{
-                  p: 1.5,
-                  borderRadius: '8px',
-                  backgroundColor: '#F0FDF4',
-                  border: '1px solid #BBF7D0',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <Typography sx={{ fontSize: '12.5px', color: '#166534', fontWeight: 600 }}>
-                  Credit for {selectedCustomer?.name}
-                </Typography>
-                <Typography sx={{ fontSize: '16px', fontWeight: 900, color: '#15803D' }}>
-                  ₹{parseFloat(advanceOnlyAmount || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        </DialogContent>
-
-        <DialogActions sx={{ px: 3, py: 2, backgroundColor: '#F8FAFC', borderTop: '1px solid #E2E8F0', gap: 1.5 }}>
-          <Button
-            onClick={() => setAdvanceOnlyModalOpen(false)}
-            disabled={advanceOnlyLoading}
-            sx={{ color: '#64748B', textTransform: 'none', fontWeight: 600 }}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            disableElevation
-            onClick={handleAddAdvanceOnly}
-            disabled={advanceOnlyLoading || !advanceOnlyAmount || parseFloat(advanceOnlyAmount) <= 0}
-            startIcon={advanceOnlyLoading ? <CircularProgress size={16} sx={{ color: '#FFFFFF' }} /> : <AccountBalanceWalletRoundedIcon />}
-            sx={{
-              backgroundColor: '#16A34A',
-              color: '#FFFFFF',
-              fontWeight: 700,
-              textTransform: 'none',
-              borderRadius: '8px',
-              px: 3,
-              '&:hover': { backgroundColor: '#15803D' },
-            }}
-          >
-            {advanceOnlyLoading ? 'Adding...' : 'Add Advance'}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* SUB-TAB 2: CUSTOMER PERFORMA LIST */}
       {activeSubTab === 'Customer Performa List' && (
@@ -2424,10 +2010,10 @@ export const PerformaPage: FC<PerformaPageProps> = ({
               <Card elevation={0} sx={{ border: '1px solid #BFDBFE', borderRadius: '10px', backgroundColor: '#EFF6FF' }}>
                 <CardContent sx={{ p: '14px !important' }}>
                   <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#1D4ED8', textTransform: 'uppercase' }}>
-                    Total Advance Received (₹)
+                    Total Advance (₹)
                   </Typography>
                   <Typography sx={{ fontSize: '20px', fontWeight: 800, color: '#1E40AF', mt: 0.5 }}>
-                    ₹{((customerPerformaSummary?.totalAdvanceReceived ?? (selectedCustomer?.totalAdvanceReceived || selectedCustomer?.totalCredit || 0)) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    ₹{customerPerformas.reduce((acc, p) => acc + (p.advanceAmount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </Typography>
                 </CardContent>
               </Card>
@@ -2435,21 +2021,10 @@ export const PerformaPage: FC<PerformaPageProps> = ({
               <Card elevation={0} sx={{ border: '1px solid #FECACA', borderRadius: '10px', backgroundColor: '#FEF2F2' }}>
                 <CardContent sx={{ p: '14px !important' }}>
                   <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#991B1B', textTransform: 'uppercase' }}>
-                    Total Advance Used (₹)
+                    Total Balance to Pay (₹)
                   </Typography>
                   <Typography sx={{ fontSize: '20px', fontWeight: 800, color: '#B91C1C', mt: 0.5 }}>
-                    ₹{((customerPerformaSummary?.totalAdvanceUsed ?? (selectedCustomer?.totalAdvanceUsed || selectedCustomer?.totalDebit || 0)) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </Typography>
-                </CardContent>
-              </Card>
-
-              <Card elevation={0} sx={{ border: '1px solid #BBF7D0', borderRadius: '10px', backgroundColor: '#F0FDF4' }}>
-                <CardContent sx={{ p: '14px !important' }}>
-                  <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#166534', textTransform: 'uppercase' }}>
-                    Available Advance (₹)
-                  </Typography>
-                  <Typography sx={{ fontSize: '20px', fontWeight: 800, color: '#15803D', mt: 0.5 }}>
-                    ₹{existingAvailableAdvance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    ₹{Math.max(0, customerPerformas.reduce((acc, p) => acc + (p.totalAllocatedAmount || 0), 0) - customerPerformas.reduce((acc, p) => acc + (p.advanceAmount || 0), 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </Typography>
                 </CardContent>
               </Card>
@@ -2512,7 +2087,7 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                     <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Company / Brand</TableCell>
                     <TableCell sx={{ fontWeight: 800, textAlign: 'center', color: '#475569' }}>Total Cases</TableCell>
                     <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Total Amount</TableCell>
-                    <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Total Advance</TableCell>
+                    <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Advance Amount</TableCell>
                     <TableCell sx={{ fontWeight: 800, textAlign: 'right', color: '#475569' }}>Balance to Pay</TableCell>
                     <TableCell sx={{ fontWeight: 800, color: '#475569' }}>Notes</TableCell>
                     <TableCell sx={{ fontWeight: 800, textAlign: 'center', color: '#475569' }}>Actions</TableCell>
@@ -2557,7 +2132,7 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                     customerPerformas.map((p, idx) => {
                       const compDisplay =
                         p.companyName || p.customerSnapshot?.companyName || (p.products?.[0]?.productSnapshot?.companyName) || 'General';
-                      const advReceived = p.totalAdvanceReceived ?? ((p.advanceAmount || 0) + (p.additionalCredits || 0));
+                      const advReceived = p.advanceAmount || 0;
                       const balanceToPay = Math.max(0, (p.totalAllocatedAmount || 0) - advReceived);
                       return (
                         <TableRow key={p._id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
@@ -2743,44 +2318,6 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                         ₹{(selectedPerformaForView.totalAllocatedAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </strong>
                     </Box>
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748B' }}>Initial Advance:</span>
-                      <strong>₹{(selectedPerformaForView.initialAdvance ?? selectedPerformaForView.advanceAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748B' }}>Additional Credits:</span>
-                      <strong style={{ color: (selectedPerformaForView.additionalCredits || 0) > 0 ? '#0B4DB7' : undefined }}>
-                        + ₹{(selectedPerformaForView.additionalCredits || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </strong>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#1E40AF', fontWeight: 700 }}>Total Advance Received:</span>
-                      <strong style={{ color: '#1E40AF' }}>
-                        ₹{(selectedPerformaForView.totalAdvanceReceived ?? ((selectedPerformaForView.advanceAmount || 0) + (selectedPerformaForView.additionalCredits || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </strong>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#991B1B', fontWeight: 700 }}>Particulars Billed (Used):</span>
-                      <strong style={{ color: '#DC2626' }}>
-                        - ₹{(selectedPerformaForView.advanceUsedAmount ?? selectedPerformaForView.totalUsedAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </strong>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gridColumn: 'span 2', pt: 0.5, borderTop: '1px dashed #EEF2F6' }}>
-                      <span style={{ color: '#166534', fontWeight: 700 }}>Available Advance Balance:</span>
-                      <strong style={{ color: '#16A34A', fontSize: '14px' }}>
-                        ₹{(selectedPerformaForView.remainingAdvanceAmount ?? selectedPerformaForView.financialSummary?.availableAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </strong>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gridColumn: 'span 2', pt: 0.5, borderTop: '1px solid #EEF2F6' }}>
-                      <span style={{ color: '#475569', fontWeight: 800 }}>Performa Balance to Pay:</span>
-                      <strong style={{ color: Math.max(0, (selectedPerformaForView.totalAllocatedAmount || 0) - (selectedPerformaForView.totalAdvanceReceived ?? (selectedPerformaForView.advanceAmount || 0))) > 0 ? '#DC2626' : '#166534', fontSize: '14px', fontWeight: 800 }}>
-                        ₹{Math.max(0, (selectedPerformaForView.totalAllocatedAmount || 0) - (selectedPerformaForView.totalAdvanceReceived ?? (selectedPerformaForView.advanceAmount || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </strong>
-                    </Box>
                   </Box>
                   {selectedPerformaForView.notes && (
                     <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid #EEF2F6', fontSize: '12px', color: '#475569' }}>
@@ -2791,7 +2328,7 @@ export const PerformaPage: FC<PerformaPageProps> = ({
               </Box>
 
               <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', mb: 1.5 }}>
-                Product Allocation & Case Consumption
+                Product Allocation
               </Typography>
               <TableContainer sx={{ border: '1px solid #E2E8F0', borderRadius: '8px', mb: 3, backgroundColor: '#FFFFFF' }}>
                 <Table size="small">
@@ -2800,12 +2337,9 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                       <TableCell sx={{ fontWeight: 800, width: '40px' }}>#</TableCell>
                       <TableCell sx={{ fontWeight: 800 }}>Product Name & Code</TableCell>
                       <TableCell sx={{ fontWeight: 800 }}>Company / Brand</TableCell>
-                      <TableCell sx={{ fontWeight: 800, textAlign: 'center', width: '70px' }}>Req Cases</TableCell>
-                      <TableCell sx={{ fontWeight: 800, textAlign: 'center', width: '70px' }}>Used</TableCell>
-                      <TableCell sx={{ fontWeight: 800, textAlign: 'center', width: '70px' }}>Rem Cases</TableCell>
+                      <TableCell sx={{ fontWeight: 800, textAlign: 'center', width: '90px' }}>Total Cases</TableCell>
                       <TableCell sx={{ fontWeight: 800, textAlign: 'right', width: '90px' }}>Rate (₹)</TableCell>
                       <TableCell sx={{ fontWeight: 800, textAlign: 'right', width: '110px' }}>Allocated (₹)</TableCell>
-                      <TableCell sx={{ fontWeight: 800, textAlign: 'right', width: '110px' }}>Used Amt (₹)</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -2824,18 +2358,9 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                         <TableCell sx={{ textAlign: 'center', fontWeight: 800, color: '#0F172A' }}>
                           {prod.requiredCases}
                         </TableCell>
-                        <TableCell sx={{ textAlign: 'center', fontWeight: 700, color: prod.usedCases > 0 ? '#DC2626' : '#64748B' }}>
-                          {prod.usedCases || 0}
-                        </TableCell>
-                        <TableCell sx={{ textAlign: 'center', fontWeight: 800, color: '#166534' }}>
-                          {prod.remainingCases !== undefined ? prod.remainingCases : Math.max(0, prod.requiredCases - (prod.usedCases || 0))}
-                        </TableCell>
                         <TableCell sx={{ textAlign: 'right' }}>₹{prod.rate?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell sx={{ textAlign: 'right', fontWeight: 700, color: '#0F172A' }}>
                           ₹{prod.allocatedAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontWeight: 700, color: prod.usedAmount > 0 ? '#DC2626' : '#64748B' }}>
-                          ₹{(prod.usedAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -2998,7 +2523,7 @@ export const PerformaPage: FC<PerformaPageProps> = ({
               Edit Performa - {editPerformaNumber}
             </Typography>
             <Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>
-              Modify brand/company, customer information, status, advance amount, and product quantities
+              Modify brand/company, customer information, status, and product quantities
             </Typography>
           </Box>
           <IconButton onClick={() => !editLoading && setEditModalOpen(false)} sx={{ color: '#FFFFFF' }}>
@@ -3017,7 +2542,7 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                 <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', mb: 2 }}>
                   Performa Information
                 </Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1.2fr 1fr 1fr 1fr 1fr' }, gap: 2 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1.2fr 1.2fr 1fr 1fr' }, gap: 2 }}>
                   <Autocomplete
                     freeSolo
                     options={companies.map((c) => c.name).filter(Boolean)}
@@ -3044,15 +2569,6 @@ export const PerformaPage: FC<PerformaPageProps> = ({
                     value={editDate}
                     onChange={(e) => setEditDate(e.target.value)}
                     slotProps={{ inputLabel: { shrink: true } }}
-                    fullWidth
-                  />
-
-                  <TextField
-                    label="Advance Amount (₹)"
-                    type="number"
-                    size="small"
-                    value={editAdvanceAmount}
-                    onChange={(e) => setEditAdvanceAmount(e.target.value)}
                     fullWidth
                   />
 

@@ -43,7 +43,6 @@ import {
   ProductsApi,
   ParticularsApi,
   AccountsApi,
-  PerformasApi,
 } from '../services/api';
 import { BillPrintModal } from './BillPrintModal';
 import type { BillPrintData } from './BillPrintTemplate';
@@ -104,6 +103,21 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
     return initialCustomerName || '';
   });
 
+  const [accountCustomerInput, setAccountCustomerInput] = useState<string>(() => {
+    return initialCustomerName && initialCustomerName !== 'ALL' ? initialCustomerName : 'All Customers';
+  });
+  const [particularCustomerInput, setParticularCustomerInput] = useState<string>(() => {
+    return initialCustomerName && initialCustomerName !== 'ALL' ? initialCustomerName : 'All Customers';
+  });
+
+  useEffect(() => {
+    const name = filterCustomer && filterCustomer !== 'ALL'
+      ? filterCustomer
+      : (currentCustomerName && currentCustomerName !== 'ALL' ? currentCustomerName : 'All Customers');
+    setAccountCustomerInput(name);
+    setParticularCustomerInput(name);
+  }, [filterCustomer, currentCustomerName]);
+
   // Subtab 2: Create Particular Form State
   const [caseCount, setCaseCount] = useState<string>('0');
   const [company, setCompany] = useState<string>('');
@@ -150,9 +164,6 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
     return today.toLocaleDateString('en-GB').replace(/\//g, '-');
   });
   const [creditLoading, setCreditLoading] = useState(false);
-
-  // Performa Integration State
-  const [customerPerformaSummary, setCustomerPerformaSummary] = useState<any | null>(null);
 
   // Bill Print Modal State
   const [selectedBillForPrint, setSelectedBillForPrint] = useState<BillPrintData | null>(null);
@@ -259,17 +270,6 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
     }
   }, [activeSubTab]);
 
-  // Fetch customer's Performa advance & allocation summary
-  useEffect(() => {
-    if (!currentCustomerName || currentCustomerName === 'General') {
-      setCustomerPerformaSummary(null);
-      return;
-    }
-    PerformasApi.getCustomerSummary(currentCustomerName)
-      .then((res) => setCustomerPerformaSummary(res))
-      .catch((err) => console.error('Failed to load Performa summary for billing:', err));
-  }, [currentCustomerName]);
-
   // Load Dropdown Options
   useEffect(() => {
     const loadOptions = async () => {
@@ -346,18 +346,6 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
       fetchParticulars(custToFetch);
     }
   }, [activeSubTab, filterCustomer, currentCustomerName]);
-
-  // Load Master Performa summary for Add Credit / customer preview
-  useEffect(() => {
-    const custToFetch = addCreditCustomerName || filterCustomer || currentCustomerName;
-    if (custToFetch && custToFetch !== 'ALL') {
-      PerformasApi.getCustomerSummary(custToFetch)
-        .then((data) => setCustomerPerformaSummary(data))
-        .catch(() => setCustomerPerformaSummary(null));
-    } else {
-      setCustomerPerformaSummary(null);
-    }
-  }, [addCreditCustomerName, filterCustomer, currentCustomerName, activeSubTab]);
 
   // Overall totals
   const overallTotals = useMemo(() => {
@@ -451,39 +439,6 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
   const handleCancelEditRow = () => {
     setEditingRowId(null);
   };
-
-  // Real-time Performa Allocation Matching for Current Product
-  const matchingPerformaInfo = useMemo(() => {
-    if (!customerPerformaSummary?.activePerformas || !selectedProduct) return null;
-    let totalAllocated = 0;
-    let totalRemaining = 0;
-    const prodNormalized = selectedProduct.trim().toLowerCase();
-
-    for (const pf of customerPerformaSummary.activePerformas) {
-      for (const prod of pf.products) {
-        const pName = (prod.productName || '').trim().toLowerCase();
-        const pCode = (prod.productCode || '').trim().toLowerCase();
-        if (pName === prodNormalized || (pCode && pCode === prodNormalized)) {
-          totalAllocated += prod.requiredCases || 0;
-          totalRemaining += prod.remainingCases || 0;
-        }
-      }
-    }
-
-    if (totalAllocated === 0 && totalRemaining === 0) return null;
-
-    const billedCases = parseFloat(quantity) || 0;
-    const remainingAfter = Math.max(0, totalRemaining - billedCases);
-    const exceeds = billedCases > totalRemaining;
-
-    return {
-      totalAllocated,
-      totalRemaining,
-      billedCases,
-      remainingAfter,
-      exceeds,
-    };
-  }, [customerPerformaSummary, selectedProduct, quantity]);
 
   // Subtotal (Sum of all products)
   const subtotalAmount = useMemo(() => {
@@ -588,10 +543,7 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
         total: finalTotalAmount,
       };
 
-      let successMsg = `Particular bill #${assignedBillNo}${company && company.trim() ? ` for ${company.trim()}` : ''} created successfully!`;
-      if (created?.performaConsumption?.consumed) {
-        successMsg += `\n\n✓ Performa Allocation Applied:\n- Consumed ${created.performaConsumption.totalCasesConsumed} cases (₹${created.performaConsumption.totalAmountConsumed?.toLocaleString('en-IN')})\n- Remaining Customer Advance: ₹${created.performaConsumption.remainingCustomerAdvance?.toLocaleString('en-IN')}`;
-      }
+      const successMsg = `Particular bill #${assignedBillNo}${company && company.trim() ? ` for ${company.trim()}` : ''} created successfully!`;
       alert(successMsg);
 
       setBillNo('');
@@ -605,13 +557,6 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
       setTax('');
       fetchAccounts(filterCustomer);
       fetchParticulars();
-
-      // Refresh customer Performa summary
-      if (currentCustomerName && currentCustomerName !== 'General') {
-        PerformasApi.getCustomerSummary(currentCustomerName)
-          .then((res) => setCustomerPerformaSummary(res))
-          .catch(() => {});
-      }
 
       setActiveSubTab('Particular Details');
 
@@ -642,20 +587,17 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
         creditAmount: creditAmount.trim(),
         date: creditDate,
         paymentMode: 'Bank',
-        reference: customerPerformaSummary?.masterPerforma ? `Credit for ${customerPerformaSummary.masterPerforma.performaNumber}` : '',
+        reference: '',
         notes: creditNotes.trim(),
       });
 
-      alert(res?.message || 'Credit added successfully and synced to Master Performa!');
+      alert(res?.message || 'Credit added successfully!');
       setCreditAmount('');
-      setCreditNotes('Additional customer advance');
+      setCreditNotes('Additional customer payment');
       
       // Refresh all financial states
       fetchAccounts(filterCustomer);
       fetchParticulars();
-      if (PerformasApi.getCustomerSummary) {
-        PerformasApi.getCustomerSummary(targetCust).then(setCustomerPerformaSummary).catch(() => {});
-      }
       setActiveSubTab('Account Details');
     } catch (err: any) {
       console.error('Failed to add credit:', err);
@@ -1401,13 +1343,6 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                       />
                     )}
                   />
-                  {customerPerformaSummary && customerPerformaSummary.availableAdvance > 0 && (
-                    <Box sx={{ mt: 0.5 }}>
-                      <Typography sx={{ fontSize: '11px', color: '#166534', fontWeight: 700 }}>
-                        ★ Available Advance: ₹{customerPerformaSummary.availableAdvance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </Typography>
-                    </Box>
-                  )}
                 </Box>
                 <Box>
                   <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#475569', mb: 0.5 }}>
@@ -1739,45 +1674,7 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
               >
                 Product Entry
               </Typography>
-
-              {customerPerformaSummary && customerPerformaSummary.availableAdvance > 0 && (
-                <Chip
-                  label={`Performa Available: ₹${customerPerformaSummary.availableAdvance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
-                  size="small"
-                  sx={{ backgroundColor: '#DCFCE7', color: '#166534', fontWeight: 800, fontSize: '11.5px' }}
-                />
-              )}
             </Box>
-
-            {matchingPerformaInfo && (
-              <Box
-                sx={{
-                  backgroundColor: matchingPerformaInfo.exceeds ? '#FEF2F2' : '#EFF6FF',
-                  borderBottom: `1px solid ${matchingPerformaInfo.exceeds ? '#FECACA' : '#BFDBFE'}`,
-                  px: 2,
-                  py: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: 1,
-                }}
-              >
-                <Typography sx={{ fontSize: '12px', fontWeight: 700, color: matchingPerformaInfo.exceeds ? '#991B1B' : '#1E40AF' }}>
-                  📦 Performa Allocation: <strong>{matchingPerformaInfo.totalRemaining} cases</strong> available
-                  {matchingPerformaInfo.billedCases > 0 && (
-                    <span> | Bill: <strong>{matchingPerformaInfo.billedCases} cases</strong> | Remaining: <strong>{matchingPerformaInfo.remainingAfter} cases</strong></span>
-                  )}
-                </Typography>
-                {matchingPerformaInfo.exceeds && (
-                  <Chip
-                    label={`Performa available for ${matchingPerformaInfo.totalRemaining} cases only. ${matchingPerformaInfo.billedCases - matchingPerformaInfo.totalRemaining} outside Performa.`}
-                    size="small"
-                    sx={{ backgroundColor: '#FEE2E2', color: '#991B1B', fontWeight: 700, fontSize: '11px' }}
-                  />
-                )}
-              </Box>
-            )}
 
             <Box
               sx={{
@@ -2511,6 +2408,8 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
                 <Autocomplete
                   size="small"
+                  openOnFocus
+                  autoHighlight
                   options={[{ id: 'ALL', name: 'All Customers' }, ...customerOptions]}
                   getOptionLabel={(option) => (typeof option === 'string' ? option : option.name || '')}
                   isOptionEqualToValue={(option, val) => option.name === val.name}
@@ -2519,6 +2418,29 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                       ? customerOptions.find((c) => c.name === filterCustomer) || { id: filterCustomer, name: filterCustomer }
                       : (currentCustomerName && currentCustomerName !== 'ALL' ? customerOptions.find((c) => c.name === currentCustomerName) || { id: 'ALL', name: 'All Customers' } : { id: 'ALL', name: 'All Customers' })
                   }
+                  inputValue={accountCustomerInput}
+                  onInputChange={(_, newInputValue, reason) => {
+                    if (reason === 'input') {
+                      setAccountCustomerInput(newInputValue);
+                    } else if (reason === 'reset') {
+                      const curName = filterCustomer && filterCustomer !== 'ALL'
+                        ? filterCustomer
+                        : (currentCustomerName && currentCustomerName !== 'ALL' ? currentCustomerName : 'All Customers');
+                      setAccountCustomerInput(newInputValue || curName);
+                    } else if (reason === 'clear') {
+                      setAccountCustomerInput('');
+                    }
+                  }}
+                  filterOptions={(options, state) => {
+                    if (!state.inputValue || state.inputValue === 'All Customers') {
+                      return options;
+                    }
+                    const query = state.inputValue.toLowerCase().trim();
+                    return options.filter((o) => {
+                      const name = typeof o === 'string' ? o : o.name;
+                      return name && name.toLowerCase().includes(query);
+                    });
+                  }}
                   onChange={(_, val) => {
                     const selectedName = val ? (val.id === 'ALL' ? 'ALL' : val.name) : 'ALL';
                     setFilterCustomer(selectedName);
@@ -2534,6 +2456,18 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                     <TextField
                       {...params}
                       placeholder="Filter Customer..."
+                      onClick={() => {
+                        if (accountCustomerInput === 'All Customers') {
+                          setAccountCustomerInput('');
+                        }
+                      }}
+                      onFocus={(e) => {
+                        if (accountCustomerInput === 'All Customers') {
+                          setAccountCustomerInput('');
+                        } else {
+                          (e.target as HTMLInputElement)?.select?.();
+                        }
+                      }}
                       sx={{
                         backgroundColor: '#FFFFFF',
                         borderRadius: '6px',
@@ -2756,6 +2690,8 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
               <Autocomplete
                 size="small"
+                openOnFocus
+                autoHighlight
                 options={[{ id: 'ALL', name: 'All Customers' }, ...customerOptions]}
                 getOptionLabel={(option) => (typeof option === 'string' ? option : option.name || '')}
                 isOptionEqualToValue={(option, val) => option.name === val.name}
@@ -2764,6 +2700,29 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                     ? customerOptions.find((c) => c.name === filterCustomer) || { id: filterCustomer, name: filterCustomer }
                     : (currentCustomerName && currentCustomerName !== 'ALL' ? customerOptions.find((c) => c.name === currentCustomerName) || { id: 'ALL', name: 'All Customers' } : { id: 'ALL', name: 'All Customers' })
                 }
+                inputValue={particularCustomerInput}
+                onInputChange={(_, newInputValue, reason) => {
+                  if (reason === 'input') {
+                    setParticularCustomerInput(newInputValue);
+                  } else if (reason === 'reset') {
+                    const curName = filterCustomer && filterCustomer !== 'ALL'
+                      ? filterCustomer
+                      : (currentCustomerName && currentCustomerName !== 'ALL' ? currentCustomerName : 'All Customers');
+                    setParticularCustomerInput(newInputValue || curName);
+                  } else if (reason === 'clear') {
+                    setParticularCustomerInput('');
+                  }
+                }}
+                filterOptions={(options, state) => {
+                  if (!state.inputValue || state.inputValue === 'All Customers') {
+                    return options;
+                  }
+                  const query = state.inputValue.toLowerCase().trim();
+                  return options.filter((o) => {
+                    const name = typeof o === 'string' ? o : o.name;
+                    return name && name.toLowerCase().includes(query);
+                  });
+                }}
                 onChange={(_, val) => {
                   const selectedName = val ? (val.id === 'ALL' ? 'ALL' : val.name) : 'ALL';
                   setFilterCustomer(selectedName);
@@ -2779,6 +2738,18 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                   <TextField
                     {...params}
                     placeholder="Filter Customer..."
+                    onClick={() => {
+                      if (particularCustomerInput === 'All Customers') {
+                        setParticularCustomerInput('');
+                      }
+                    }}
+                    onFocus={(e) => {
+                      if (particularCustomerInput === 'All Customers') {
+                        setParticularCustomerInput('');
+                      } else {
+                        (e.target as HTMLInputElement)?.select?.();
+                      }
+                    }}
                     sx={{
                       backgroundColor: '#FFFFFF',
                       borderRadius: '6px',
@@ -3143,93 +3114,6 @@ export const ParticularsPage: FC<ParticularsPageProps> = ({ initialCustomerName,
                 gap: 3,
               }}
             >
-              {/* Customer Master Performa Live Summary Preview */}
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2.5,
-                  borderRadius: '10px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1.5px solid #E2E8F0',
-                }}
-              >
-                <Typography sx={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', mb: 1.5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Customer Performa & Balance Overview
-                </Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: (customerPerformaSummary?.customerPendingAmount && customerPerformaSummary.customerPendingAmount > 0) ? 'repeat(5, 1fr)' : 'repeat(4, 1fr)' }, gap: 2 }}>
-                  <Box>
-                    <Typography sx={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Customer</Typography>
-                    <Typography sx={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A' }}>
-                      {addCreditCustomerName || currentCustomerName || 'General'}
-                    </Typography>
-                  </Box>
-                  <Box>
-                    <Typography sx={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Existing Performa</Typography>
-                    <Chip
-                      label={customerPerformaSummary?.masterPerforma?.performaNumber || 'No Master Performa'}
-                      size="small"
-                      sx={{
-                        fontWeight: 800,
-                        fontSize: '12px',
-                        backgroundColor: customerPerformaSummary?.masterPerforma ? '#EFF6FF' : '#F1F5F9',
-                        color: customerPerformaSummary?.masterPerforma ? '#1D4ED8' : '#64748B',
-                      }}
-                    />
-                  </Box>
-                  {customerPerformaSummary?.customerPendingAmount && customerPerformaSummary.customerPendingAmount > 0 ? (
-                    <>
-                      <Box>
-                        <Typography sx={{ fontSize: '12px', color: '#DC2626', fontWeight: 600 }}>Current Pending Due</Typography>
-                        <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#DC2626' }}>
-                          ₹{customerPerformaSummary.customerPendingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Box>
-                        <Typography sx={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Available Advance</Typography>
-                        <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#16A34A' }}>
-                          ₹0.00
-                        </Typography>
-                      </Box>
-                      <Box>
-                        <Typography sx={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>After Credit</Typography>
-                        {(() => {
-                          const cred = parseFloat(creditAmount) || 0;
-                          const netPending = (customerPerformaSummary.customerPendingAmount || 0) - cred;
-                          if (netPending > 0) {
-                            return (
-                              <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#E11D48' }}>
-                                ₹{netPending.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Due)
-                              </Typography>
-                            );
-                          }
-                          const surplus = Math.abs(netPending);
-                          return (
-                            <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#16A34A' }}>
-                              ₹{surplus.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Advance)
-                            </Typography>
-                          );
-                        })()}
-                      </Box>
-                    </>
-                  ) : (
-                    <>
-                      <Box>
-                        <Typography sx={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Current Available</Typography>
-                        <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#16A34A' }}>
-                          ₹{(customerPerformaSummary?.availableAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                      <Box>
-                        <Typography sx={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>After Credit</Typography>
-                        <Typography sx={{ fontSize: '15px', fontWeight: 800, color: '#0B4DB7' }}>
-                          ₹{((customerPerformaSummary?.availableAmount ?? 0) + (parseFloat(creditAmount) || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </Typography>
-                      </Box>
-                    </>
-                  )}
-                </Box>
-              </Paper>
-
               {/* Customer Name */}
               <Box
                 sx={{

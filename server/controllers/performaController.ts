@@ -3,15 +3,7 @@ import mongoose from 'mongoose';
 import { Performa, type IPerformaProductItem } from '../models/Performa';
 import { PerformaAudit } from '../models/PerformaAudit';
 import { Customer } from '../models/Customer';
-import { Particular } from '../models/Particular';
-import { AccountLedger } from '../models/AccountLedger';
-import { escapeRegex, recalculateCustomerBalance } from '../utils/ledgerUtils';
-import {
-  getCustomerPerformaSummary,
-  getCustomerMasterPerforma,
-  addCustomerCreditToMasterPerforma,
-  getParticularNetTotal,
-} from '../services/performaConsumptionService';
+import { escapeRegex } from '../utils/ledgerUtils';
 
 export const getPerformas = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -81,194 +73,34 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
 
     const performas = await Performa.find(filter).sort(sortObj).lean();
 
-    // Fetch all audits, particulars, and account ledger entries to calculate exact initial advance, credits, and debits with 100% parity to Particulars
-    const allAudits = await PerformaAudit.find({}).lean();
-    const allParticulars = await Particular.find({}).lean();
-    const allAccountLedgers = await AccountLedger.find({}).lean();
-
-    // Map account ledger credit and debit by customerName (lowercase)
-    const ledgerByCustomer = new Map<string, { totalCredit: number; totalDebit: number }>();
-    for (const entry of allAccountLedgers) {
-      const cKey = (entry.customerName || '').trim().toLowerCase();
-      if (!cKey) continue;
-      const current = ledgerByCustomer.get(cKey) || { totalCredit: 0, totalDebit: 0 };
-      const cred = parseFloat(String(entry.credit || '0').replace(/,/g, '')) || 0;
-      const deb = parseFloat(String(entry.debit || '0').replace(/,/g, '')) || 0;
-      current.totalCredit += cred;
-      current.totalDebit += deb;
-      ledgerByCustomer.set(cKey, current);
-    }
-
-    // Map particulars by ID, billNo, and customerName
-    const particularById = new Map<string, any>();
-    const particularByBillNo = new Map<string, any>();
-    const particularsByCustomer = new Map<string, any[]>();
-
-    for (const p of allParticulars) {
-      const net = getParticularNetTotal(p);
-      const enhanced = { ...p, netTotal: net };
-      particularById.set(String(p._id), enhanced);
-      if (p.billNo) {
-        particularByBillNo.set(String(p.billNo).trim().toLowerCase(), enhanced);
-      }
-      const custKey = (p.customerName || '').trim().toLowerCase();
-      if (!particularsByCustomer.has(custKey)) {
-        particularsByCustomer.set(custKey, []);
-      }
-      particularsByCustomer.get(custKey)!.push(enhanced);
-    }
-
-    // Build map of customerName (lowercase) -> performaId to link any orphan audits to the customer's performa
-    const customerPerformaMap = new Map<string, string>();
-    for (const p of performas) {
-      const cKey = (p.customerSnapshot?.name || '').trim().toLowerCase();
-      if (cKey && !customerPerformaMap.has(cKey)) {
-        customerPerformaMap.set(cKey, String(p._id));
-      }
-    }
-
-    const auditMap = new Map<
-      string,
-      {
-        initialAdvance: number;
-        totalCredits: number;
-        consumedParticularIds: Set<string>;
-        legacyConsumedAmount: number;
-      }
-    >();
-
-    for (const a of allAudits) {
-      let pId = a.performaId ? String(a.performaId) : '';
-      if (!pId) {
-        const cKey = (a.customerName || '').trim().toLowerCase();
-        pId = customerPerformaMap.get(cKey) || '';
-      }
-      if (!pId) continue;
-
-      const existing = auditMap.get(pId) || {
-        initialAdvance: 0,
-        totalCredits: 0,
-        consumedParticularIds: new Set<string>(),
-        legacyConsumedAmount: 0,
-      };
-      const amt = Number(a.amount) || 0;
-      if (a.type === 'ADVANCE_RECEIVED' || a.type === 'PERFORMA_ADVANCE') {
-        existing.totalCredits += amt;
-        if (a.reference?.includes('Initial Advance') || a.notes?.includes('Initial')) {
-          existing.initialAdvance += amt;
-        }
-      } else if (a.type === 'PERFORMA_CONSUMED') {
-        if (a.particularId) {
-          existing.consumedParticularIds.add(String(a.particularId));
-        } else if (a.billNo) {
-          existing.consumedParticularIds.add(`bill_${String(a.billNo).trim().toLowerCase()}`);
-        } else {
-          existing.legacyConsumedAmount += amt;
-        }
-      } else if (a.type === 'PERFORMA_REVERSED') {
-        if (a.particularId) {
-          existing.consumedParticularIds.delete(String(a.particularId));
-        } else if (a.billNo) {
-          existing.consumedParticularIds.delete(`bill_${String(a.billNo).trim().toLowerCase()}`);
-        } else {
-          existing.legacyConsumedAmount = Math.max(0, existing.legacyConsumedAmount - amt);
-        }
-      }
-      auditMap.set(pId, existing);
-    }
-
     let totalAdvance = 0;
-    let totalUsedAdvance = 0;
     let totalRemainingAdvance = 0;
     let totalRequiredCases = 0;
-    let totalUsedCases = 0;
-    let totalRemainingCases = 0;
 
-    const enrichedPerformas = performas.map((p) => {
-      const pId = String(p._id);
-      const auditData = auditMap.get(pId);
-      const custKey = (p.customerSnapshot?.name || '').trim().toLowerCase();
-      const ledgerData = ledgerByCustomer.get(custKey) || { totalCredit: 0, totalDebit: 0 };
-      const custBills = particularsByCustomer.get(custKey) || [];
-
-      const pAdv = Number(p.advanceAmount) || 0;
-      const pDocAddl = Number(p.additionalCredits) || 0;
-      const pDocTotAdv = Number(p.totalAdvanceReceived) || 0;
-      const auditTotalCreds = auditData?.totalCredits || 0;
-
-      // Total Advance Received (Credit): maximum of AccountLedger credit, audits, and performa stored values
-      const totalAvailableAmount = Math.max(
-        Number(ledgerData.totalCredit.toFixed(2)),
-        auditTotalCreds,
-        pDocTotAdv,
-        pAdv + pDocAddl,
-        pAdv
-      );
-
-      let initialAdvance = pAdv > 0 ? pAdv : (auditData?.initialAdvance || totalAvailableAmount);
-      if (initialAdvance > totalAvailableAmount) initialAdvance = totalAvailableAmount;
-      const additionalCredits = Math.max(0, Number((totalAvailableAmount - initialAdvance).toFixed(2)));
-
-      // Calculate Used Amount = SUM of Net Total of all customer's Particulars bills or AccountLedger debit
-      let consumedNetTotal = 0;
-      if (custBills.length > 0) {
-        consumedNetTotal = custBills.reduce((sum, b) => sum + (b.netTotal || b.total || 0), 0);
-      } else if (auditData && auditData.consumedParticularIds.size > 0) {
-        for (const pKey of auditData.consumedParticularIds) {
-          if (pKey.startsWith('bill_')) {
-            const billNum = pKey.replace('bill_', '');
-            const partDoc = particularByBillNo.get(billNum);
-            if (partDoc) {
-              consumedNetTotal += partDoc.netTotal;
-            }
-          } else {
-            const partDoc = particularById.get(pKey);
-            if (partDoc) {
-              consumedNetTotal += partDoc.netTotal;
-            }
-          }
-        }
-      }
-      const usedAmount = Math.max(Number(consumedNetTotal.toFixed(2)), Number(ledgerData.totalDebit.toFixed(2)));
-
+    const enrichedPerformas = performas.map((p: any) => {
+      const adv = Number((p.advanceAmount || 0).toFixed(2));
       const performaTotalValue = Number((p.totalAllocatedAmount || 0).toFixed(2));
-      const balanceAmount = Number((totalAvailableAmount - usedAmount).toFixed(2));
-      const remainingAmount = balanceAmount;
-      const dbRemainingAdvance = Math.max(0, balanceAmount);
+      const balanceAmount = Math.max(0, Number((performaTotalValue - adv).toFixed(2)));
 
-      // Sync master performa DB document if out of sync
-      if (p.advanceUsedAmount !== usedAmount || p.remainingAdvanceAmount !== dbRemainingAdvance) {
-        Performa.updateOne(
-          { _id: p._id },
-          { advanceUsedAmount: usedAmount, remainingAdvanceAmount: dbRemainingAdvance }
-        ).exec().catch(() => {});
-      }
-
-      totalAdvance += totalAvailableAmount;
-      totalUsedAdvance += usedAmount;
-      totalRemainingAdvance += Math.max(0, remainingAmount);
+      totalAdvance += adv;
+      totalRemainingAdvance += adv;
       totalRequiredCases += p.totalRequiredCases || 0;
-      totalUsedCases += p.totalUsedCases || 0;
-      totalRemainingCases += p.totalRemainingCases || 0;
 
       return {
         ...p,
-        initialAdvance: Number(initialAdvance.toFixed(2)),
-        additionalCredits: Number(additionalCredits.toFixed(2)),
-        totalAdvanceReceived: totalAvailableAmount,
-        totalAvailableAmount,
+        initialAdvance: adv,
+        additionalCredits: 0,
+        totalAdvanceReceived: adv,
+        totalAvailableAmount: adv,
         performaTotalValue,
-        usedAmount,
-        remainingAmount,
-        advanceUsedAmount: usedAmount,
-        remainingAdvanceAmount: dbRemainingAdvance,
+        usedAmount: 0,
+        remainingAmount: adv,
+        advanceUsedAmount: 0,
+        remainingAdvanceAmount: adv,
         balanceAmount,
-        customerPendingAmount: balanceAmount < 0 ? Math.abs(balanceAmount) : 0,
-        performaRemainingAmount: Math.max(0, Number((performaTotalValue - totalAvailableAmount).toFixed(2))),
-        customerBills: custBills,
-        ledgerTotalCredit: Number(ledgerData.totalCredit.toFixed(2)),
-        ledgerTotalDebit: Number(ledgerData.totalDebit.toFixed(2)),
-        ledgerCreditBalance: Number((ledgerData.totalCredit - ledgerData.totalDebit).toFixed(2)),
+        customerPendingAmount: balanceAmount,
+        performaRemainingAmount: balanceAmount,
+        customerBills: [],
       };
     });
 
@@ -279,11 +111,11 @@ export const getPerformas = async (req: Request, res: Response, next: NextFuncti
       summary: {
         totalPerformas: enrichedPerformas.length,
         totalAdvance: Number(totalAdvance.toFixed(2)),
-        totalUsedAdvance: Number(totalUsedAdvance.toFixed(2)),
+        totalUsedAdvance: 0,
         totalRemainingAdvance: Number(totalRemainingAdvance.toFixed(2)),
         totalRequiredCases,
-        totalUsedCases,
-        totalRemainingCases,
+        totalUsedCases: 0,
+        totalRemainingCases: totalRequiredCases,
       },
     });
   } catch (error) {
@@ -319,36 +151,28 @@ export const getPerformaById = async (req: Request, res: Response, next: NextFun
       return;
     }
 
-    const summary = await getCustomerPerformaSummary(String(performa.customerId || performa.customerSnapshot.name));
-    const audits = await PerformaAudit.find({
-      $or: [{ performaId: performa._id }, { customerId: performa.customerId }],
-    }).sort({ date: -1, createdAt: -1 });
-
-    const initialAdvance = Number(summary.initialAdvance.toFixed(2)) || performa.advanceAmount || 0;
-    const additionalCredits = Number(summary.additionalCredits.toFixed(2)) || 0;
-    const totalAvailableAmount = Number((initialAdvance + additionalCredits).toFixed(2)) || performa.advanceAmount || 0;
-    const usedAmount = Number(summary.totalUsedByBills.toFixed(2));
-    const remainingAmount = Number(summary.availableAmount.toFixed(2));
+    const adv = Number((performa.advanceAmount || 0).toFixed(2));
+    const performaTotalValue = Number((performa.totalAllocatedAmount || 0).toFixed(2));
+    const balanceAmount = Math.max(0, Number((performaTotalValue - adv).toFixed(2)));
 
     res.status(200).json({
       success: true,
       data: {
         ...performa.toObject(),
-        initialAdvance,
-        additionalCredits,
-        totalAdvanceReceived: totalAvailableAmount,
-        totalAvailableAmount,
-        usedAmount,
-        remainingAmount,
-        advanceUsedAmount: usedAmount,
-        remainingAdvanceAmount: remainingAmount,
-        balanceAmount: summary.balanceAmount !== undefined ? summary.balanceAmount : remainingAmount,
-        customerPendingAmount: summary.customerPendingAmount || 0,
-        performaRemainingAmount: summary.performaRemainingAmount !== undefined ? summary.performaRemainingAmount : Math.max(0, (performa.totalAllocatedAmount || 0) - totalAvailableAmount),
-        financialSummary: summary,
-        customerBills: summary.customerBills || [],
-        auditHistory: audits,
-        transactionHistory: summary.transactionHistory,
+        initialAdvance: adv,
+        additionalCredits: 0,
+        totalAdvanceReceived: adv,
+        totalAvailableAmount: adv,
+        usedAmount: 0,
+        remainingAmount: adv,
+        advanceUsedAmount: 0,
+        remainingAdvanceAmount: adv,
+        balanceAmount,
+        customerPendingAmount: balanceAmount,
+        performaRemainingAmount: balanceAmount,
+        customerBills: [],
+        auditHistory: [],
+        transactionHistory: [],
       },
     });
   } catch (error) {
@@ -539,94 +363,6 @@ export const createPerforma = async (req: Request, res: Response, next: NextFunc
       createdBy,
     });
 
-    // 💰 Initial Advance: Check for unlinked existing advance credits for this customer
-    const custTrim = customerSnapshot.name.trim();
-    const unlinkedAudits = await PerformaAudit.find({
-      customerName: { $regex: new RegExp(`^${escapeRegex(custTrim)}$`, 'i') },
-      type: 'ADVANCE_RECEIVED',
-      $or: [{ performaId: { $exists: false } }, { performaId: null }],
-    });
-    const unlinkedAdvanceTotal = unlinkedAudits.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
-
-    // If customer already has unlinked advance credits, link them to this performa
-    if (unlinkedAudits.length > 0) {
-      for (const a of unlinkedAudits) {
-        a.performaId = performa._id;
-        a.performaNumber = performa.performaNumber;
-        if (!a.reference || a.reference === 'Customer Credit') {
-          a.reference = `Credit for ${performa.performaNumber}`;
-        }
-        await a.save();
-      }
-
-      await AccountLedger.updateMany(
-        {
-          customerName: { $regex: new RegExp(`^${escapeRegex(custTrim)}$`, 'i') },
-          type: 'ADVANCE',
-          $or: [{ performaId: { $exists: false } }, { performaId: null }, { performaId: '' }],
-        },
-        {
-          $set: {
-            performaId: String(performa._id),
-            performaNumber: performa.performaNumber,
-            billNo: performa.performaNumber,
-          },
-        }
-      );
-    }
-
-    // Determine initial advance for the performa:
-    // If user entered 0 advance, but customer had unlinked advance credits, adopt that advance!
-    if (parsedAdvance === 0 && unlinkedAdvanceTotal > 0) {
-      performa.advanceAmount = unlinkedAdvanceTotal;
-      performa.remainingAdvanceAmount = unlinkedAdvanceTotal;
-      await performa.save();
-    } else if (parsedAdvance > 0) {
-      // If user entered advance:
-      // If parsedAdvance <= unlinkedAdvanceTotal, user was re-entering existing advance — do not double-count!
-      // If parsedAdvance > unlinkedAdvanceTotal, only record new ledger credit for the difference (fresh deposit)
-      const freshCash = Math.max(0, parsedAdvance - unlinkedAdvanceTotal);
-      if (freshCash > 0) {
-        let ledgerDate = performaDate;
-        if (ledgerDate.includes('-') && ledgerDate.split('-')[0].length === 4) {
-          const parts = ledgerDate.split('-');
-          ledgerDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-        }
-
-        await PerformaAudit.create({
-          customerId: validCustomerId,
-          customerName: custTrim,
-          performaId: performa._id,
-          performaNumber: performa.performaNumber,
-          amount: freshCash,
-          type: 'ADVANCE_RECEIVED',
-          date: ledgerDate,
-          paymentMode: paymentMode || 'Bank',
-          reference: finalPerformaNumber,
-          notes: notes || 'Initial customer advance',
-          createdBy,
-        });
-
-        await AccountLedger.create({
-          billNo: finalPerformaNumber,
-          performaId: String(performa._id),
-          performaNumber: finalPerformaNumber,
-          customerName: custTrim,
-          companyName: performa.companyName || 'General',
-          date: ledgerDate,
-          debit: '0.00',
-          credit: freshCash.toFixed(2),
-          balance: '0.00',
-          paymentMode: paymentMode || 'Bank',
-          reference: finalPerformaNumber,
-          notes: 'Initial Advance for Performa',
-          type: 'ADVANCE',
-        });
-
-        await recalculateCustomerBalance(custTrim);
-      }
-    }
-
     res.status(201).json({ success: true, data: performa });
   } catch (error) {
     next(error);
@@ -667,47 +403,9 @@ export const updatePerforma = async (req: Request, res: Response, next: NextFunc
 
     if (advanceAmount !== undefined) {
       const newAdv = parseFloat(String(advanceAmount).replace(/,/g, '')) || 0;
-      const totalRecv = Number((newAdv + (existing.additionalCredits || 0)).toFixed(2));
       existing.advanceAmount = newAdv;
-      existing.totalAdvanceReceived = totalRecv;
-      existing.remainingAdvanceAmount = Math.max(0, Number((totalRecv - existing.advanceUsedAmount).toFixed(2)));
-
-      // Sync to AccountLedger
-      const existingLedger = await AccountLedger.findOne({
-        $or: [
-          { performaId: String(existing._id) },
-          { performaNumber: existing.performaNumber },
-          { billNo: existing.performaNumber },
-        ],
-      });
-
-      if (existingLedger) {
-        existingLedger.credit = newAdv.toFixed(2);
-        await existingLedger.save();
-      } else if (newAdv > 0) {
-        let lDate = existing.date || '';
-        if (lDate.includes('-') && lDate.split('-')[0].length === 4) {
-          const parts = lDate.split('-');
-          lDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-        }
-        await AccountLedger.create({
-          billNo: existing.performaNumber,
-          performaId: String(existing._id),
-          performaNumber: existing.performaNumber,
-          customerName: existing.customerSnapshot.name.trim(),
-          companyName: existing.companyName || 'General',
-          date: lDate,
-          debit: '0.00',
-          credit: newAdv.toFixed(2),
-          balance: '0.00',
-          paymentMode: 'Bank',
-          reference: existing.performaNumber,
-          notes: 'Advance for Performa',
-          type: 'ADVANCE',
-        });
-      }
-
-      await recalculateCustomerBalance(existing.customerSnapshot.name.trim());
+      existing.totalAdvanceReceived = newAdv;
+      existing.remainingAdvanceAmount = newAdv;
     }
 
     if (date) existing.date = date;
@@ -857,20 +555,8 @@ export const deletePerforma = async (req: Request, res: Response, next: NextFunc
       return;
     }
 
-    // Cascade delete linked audits and ledger entries for this performa
     await PerformaAudit.deleteMany({ performaId: performa._id });
-    await AccountLedger.deleteMany({
-      $or: [
-        { performaId: String(performa._id) },
-        { performaNumber: performa.performaNumber },
-        { billNo: performa.performaNumber },
-      ],
-    });
     await Performa.findByIdAndDelete(id);
-
-    if (performa.customerSnapshot?.name) {
-      await recalculateCustomerBalance(performa.customerSnapshot.name.trim());
-    }
 
     res.status(200).json({ success: true, message: 'Performa deleted successfully', data: {} });
   } catch (error) {
@@ -880,26 +566,46 @@ export const deletePerforma = async (req: Request, res: Response, next: NextFunc
 
 export const addCustomerAdvance = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { customerId, customerName, companyName, amount, date, paymentMode, reference, notes, createdBy = 'Admin' } = req.body;
+    const { customerId, customerName, amount, date, paymentMode, reference, notes, createdBy = 'Admin' } = req.body;
+    const parsedAmount = parseFloat(String(amount).replace(/,/g, '')) || 0;
+    if (parsedAmount <= 0) {
+      res.status(400).json({ success: false, error: 'Valid advance amount greater than 0 is required' });
+      return;
+    }
 
-    const result = await addCustomerCreditToMasterPerforma({
-      customerId,
-      customerName,
-      companyName,
-      creditAmount: amount,
-      date,
-      paymentMode,
-      reference,
-      notes,
+    const query: any = {};
+    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+      query.customerId = customerId;
+    } else if (customerName) {
+      query['customerSnapshot.name'] = { $regex: new RegExp(`^${escapeRegex(customerName.trim())}$`, 'i') };
+    }
+
+    const performa = await Performa.findOne(query).sort({ createdAt: -1 });
+    if (performa) {
+      performa.advanceAmount = Number(((performa.advanceAmount || 0) + parsedAmount).toFixed(2));
+      performa.remainingAdvanceAmount = Number(((performa.remainingAdvanceAmount || 0) + parsedAmount).toFixed(2));
+      await performa.save();
+    }
+
+    const auditEntry = await PerformaAudit.create({
+      customerId: performa?.customerId,
+      customerName: customerName || performa?.customerSnapshot?.name || 'General',
+      performaId: performa?._id,
+      performaNumber: performa?.performaNumber || '',
+      amount: parsedAmount,
+      type: 'ADVANCE_RECEIVED',
+      date: date || new Date().toISOString().split('T')[0],
+      paymentMode: paymentMode || 'Bank',
+      reference: reference || 'Performa Advance',
+      notes: notes || 'Performa Advance',
       createdBy,
     });
 
     res.status(201).json({
       success: true,
       message: 'Advance credit added successfully',
-      data: result.auditEntry,
-      masterPerforma: result.masterPerforma,
-      summary: result.summary,
+      data: auditEntry,
+      masterPerforma: performa,
     });
   } catch (error: any) {
     next(error);
@@ -909,8 +615,29 @@ export const addCustomerAdvance = async (req: Request, res: Response, next: Next
 export const getCustomerSummaryEndpoint = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const customerId = String(req.params.customerId || '');
-    const summary = await getCustomerPerformaSummary(customerId);
-    res.status(200).json({ success: true, data: summary });
+    const query: any = {};
+    if (mongoose.Types.ObjectId.isValid(customerId)) {
+      query.customerId = customerId;
+    } else {
+      query['customerSnapshot.name'] = { $regex: new RegExp(`^${escapeRegex(customerId.trim())}$`, 'i') };
+    }
+    const performas = await Performa.find(query).sort({ createdAt: -1 }).lean();
+    const totalAdv = performas.reduce((sum, p) => sum + (p.advanceAmount || 0), 0);
+    const totalAlloc = performas.reduce((sum, p) => sum + (p.totalAllocatedAmount || 0), 0);
+    const balance = Math.max(0, totalAlloc - totalAdv);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        hasMasterPerforma: performas.length > 0,
+        masterPerforma: performas[0] || null,
+        activePerformas: performas.filter((p: any) => p.status === 'ACTIVE' || p.status === 'PARTIALLY_USED'),
+        availableAdvance: totalAdv,
+        availableAmount: totalAdv,
+        balanceAmount: balance,
+        customerPendingAmount: balance,
+      },
+    });
   } catch (error) {
     next(error);
   }

@@ -509,17 +509,13 @@ export const generateCustomerListPrintHtml = (
 
     return `
       <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
-        <td class="text-center" style="width: 35px; border: 1px solid #CBD5E1; padding: 6px 5px;">${idx + 1}</td>
-        <td class="text-center" style="width: 60px; font-weight:700; color:#475569; border: 1px solid #CBD5E1; padding: 6px 5px;">${idDisplay}</td>
-        <td style="font-weight:800; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">
-          ${c.name}
-          ${c.gst && c.gst !== 'N/A' ? `<div style="font-size:9.5px; color:#64748B; font-weight:600;">GSTIN: ${c.gst}</div>` : ''}
-        </td>
-        <td style="font-size:11px; color:#334155; width:95px; border: 1px solid #CBD5E1; padding: 6px 5px;">${c.mobile || '-'}</td>
-        <td style="font-size:10.5px; color:#475569; max-width:180px; border: 1px solid #CBD5E1; padding: 6px 5px;">${c.address || '-'}</td>
-        <td class="text-right" style="font-weight:700; color:#1E293B; width:105px; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${deb}</td>
-        <td class="text-right" style="font-weight:700; color:#16A34A; width:105px; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${cred}</td>
-        <td class="text-right" style="width:130px; border: 1px solid #CBD5E1; padding: 6px 8px;">${balanceHtml}</td>
+        <td class="text-center" style="width: 26px; border: 1px solid #CBD5E1; padding: 4px 3px;">${idx + 1}</td>
+        <td class="text-center" style="width: 48px; font-weight:700; color:#475569; border: 1px solid #CBD5E1; padding: 4px 3px;">${idDisplay}</td>
+        <td style="font-weight:800; color:#0F172A; border: 1px solid #CBD5E1; padding: 4px 6px;">${c.name}</td>
+        <td style="font-size:9.5px; color:#475569; max-width: 140px; border: 1px solid #CBD5E1; padding: 4px 4px; word-break: break-word;">${c.address || '-'}</td>
+        <td class="text-right" style="font-weight:700; color:#1E293B; width: 85px; border: 1px solid #CBD5E1; padding: 4px 5px; font-size: 10px;">₹ ${deb}</td>
+        <td class="text-right" style="font-weight:700; color:#16A34A; width: 85px; border: 1px solid #CBD5E1; padding: 4px 5px; font-size: 10px;">₹ ${cred}</td>
+        <td class="text-right" style="width: 100px; border: 1px solid #CBD5E1; padding: 4px 5px; font-size: 9.5px;">${balanceHtml}</td>
       </tr>
     `;
   }).join('');
@@ -532,8 +528,8 @@ export const generateCustomerListPrintHtml = (
   <title>${reportTitle} - ${currentDate}</title>
   <style>
     @page {
-      size: A4 landscape;
-      margin: 8mm 10mm;
+      size: A4 portrait;
+      margin: 8mm 8mm;
     }
     *, *:before, *:after {
       box-sizing: border-box;
@@ -602,23 +598,24 @@ export const generateCustomerListPrintHtml = (
     .kpi-summary-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
-      gap: 6px;
+      gap: 5px;
       margin-bottom: 10px;
     }
     .kpi-card {
       border: 1px solid #CBD5E1;
       border-radius: 5px;
-      padding: 6px 8px;
+      padding: 5px 6px;
       background-color: #F8FAFC;
     }
     .kpi-title {
-      font-size: 9.5px;
+      font-size: 8.5px;
       font-weight: 700;
       color: #64748B;
       text-transform: uppercase;
+      line-height: 1.2;
     }
     .kpi-val {
-      font-size: 13.5px;
+      font-size: 12px;
       font-weight: 900;
       color: #0F172A;
       margin-top: 2px;
@@ -626,7 +623,7 @@ export const generateCustomerListPrintHtml = (
     .data-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 11px;
+      font-size: 10px;
       border: 1px solid #0F172A;
     }
     thead {
@@ -642,14 +639,14 @@ export const generateCustomerListPrintHtml = (
       background-color: #0F172A;
       color: #FFFFFF;
       font-weight: 800;
-      font-size: 10.5px;
-      padding: 6px 5px;
+      font-size: 10px;
+      padding: 5px 4px;
       border: 1px solid #0F172A;
       text-align: left;
       letter-spacing: 0.02em;
     }
     .data-table td {
-      padding: 5px 5px;
+      padding: 4px 4px;
       border: 1px solid #CBD5E1;
       vertical-align: middle;
     }
@@ -701,7 +698,6 @@ export const generateCustomerListPrintHtml = (
       <div class="meta-box">
         <div>Generated: <span class="meta-bold">${currentDate} ${currentTime}</span></div>
         <div>Total Records: <span class="meta-bold">${customers.length} Customers</span></div>
-        <div>Phone: +91 98765 43210</div>
       </div>
     </div>
 
@@ -733,22 +729,21 @@ export const generateCustomerListPrintHtml = (
     <table class="data-table">
       <thead>
         <tr>
-          <th class="text-center" style="width: 35px;">#</th>
-          <th class="text-center" style="width: 60px;">ID</th>
+          <th class="text-center" style="width: 26px;">#</th>
+          <th class="text-center" style="width: 48px;">ID</th>
           <th>Customer Name</th>
-          <th style="width: 95px;">Mobile</th>
-          <th>Address</th>
-          <th class="text-right" style="width: 105px;">Debit (Dr)</th>
-          <th class="text-right" style="width: 105px;">Credit (Cr)</th>
-          <th class="text-right" style="width: 130px;">Net Balance / Status</th>
+          <th style="width: 140px;">Address</th>
+          <th class="text-right" style="width: 85px;">Debit (Dr)</th>
+          <th class="text-right" style="width: 85px;">Credit (Cr)</th>
+          <th class="text-right" style="width: 100px;">Net Balance / Status</th>
         </tr>
       </thead>
       <tbody>
-        ${rowsHtml || '<tr><td colspan="8" class="text-center" style="padding: 20px;">No customer records found for the selected range.</td></tr>'}
+        ${rowsHtml || '<tr><td colspan="7" class="text-center" style="padding: 20px;">No customer records found for the selected range.</td></tr>'}
       </tbody>
       <tfoot>
         <tr class="totals-row">
-          <td colspan="5" class="text-right" style="padding-right: 10px;">GRAND TOTALS (${customers.length} Customers):</td>
+          <td colspan="4" class="text-right" style="padding-right: 10px;">GRAND TOTALS (${customers.length} Customers):</td>
           <td class="text-right">₹ ${totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
           <td class="text-right">₹ ${totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
           <td class="text-right">
@@ -1277,9 +1272,6 @@ export const generatePerformaHtml = (performa: any): string => {
 
   const totalAllocatedVal = Math.max(0, subtotalVal - discountAmt + packingAmt + taxAmt);
 
-  const initAdv = performa.initialAdvance !== undefined ? performa.initialAdvance : (Number(performa.advanceAmount) || 0);
-  const addlCred = performa.additionalCredits !== undefined ? performa.additionalCredits : 0;
-
   const billsTotalCases = (performa.customerBills || []).reduce(
     (acc: number, b: any) => acc + (parseFloat(String(b.caseCount || 0)) || 0),
     0
@@ -1288,30 +1280,6 @@ export const generatePerformaHtml = (performa: any): string => {
     (acc: number, b: any) => acc + (parseFloat(String(b.netTotal || b.total || b.amount || 0)) || 0),
     0
   );
-
-  const totalAdvReceived = performa.totalAdvanceReceived !== undefined
-    ? performa.totalAdvanceReceived
-    : (performa.totalAvailableAmount !== undefined
-      ? performa.totalAvailableAmount
-      : (performa.ledgerTotalCredit !== undefined
-        ? performa.ledgerTotalCredit
-        : Math.max(initAdv + addlCred, initAdv)));
-
-  const usedAmt = performa.usedAmount !== undefined
-    ? performa.usedAmount
-    : (performa.ledgerTotalDebit !== undefined
-      ? performa.ledgerTotalDebit
-      : (performa.advanceUsedAmount !== undefined ? performa.advanceUsedAmount : billsTotalAmt));
-
-  const customerAdvBal = performa.balanceAmount !== undefined
-    ? performa.balanceAmount
-    : (performa.ledgerCreditBalance !== undefined
-      ? performa.ledgerCreditBalance
-      : (performa.remainingAdvanceAmount !== undefined ? performa.remainingAdvanceAmount : (totalAdvReceived - usedAmt)));
-
-  const performaPendingVal = performa.performaRemainingAmount !== undefined
-    ? performa.performaRemainingAmount
-    : Math.max(0, totalAllocatedVal - totalAdvReceived);
 
   const productRowsHtml = (performa.products || []).map((item: any, idx: number) => {
     const isEven = idx % 2 === 1;
@@ -1333,9 +1301,6 @@ export const generatePerformaHtml = (performa: any): string => {
       </td>
       <td style="padding: 7px 6px; text-align: center; font-weight: 800; color: #0F172A; border: 1px solid #CBD5E1;">
         ${item.requiredCases}
-      </td>
-      <td style="padding: 7px 6px; text-align: center; font-weight: 700; color: #0B4DB7; border: 1px solid #CBD5E1;">
-        ${item.remainingCases !== undefined ? item.remainingCases : item.requiredCases}
       </td>
       <td style="padding: 7px 8px; text-align: right; border: 1px solid #CBD5E1; color: #334155;">
         ₹ ${formatCurrency(rateVal)}
@@ -1403,15 +1368,14 @@ export const generatePerformaHtml = (performa: any): string => {
               <th style="width: 35px; text-align: center;">#</th>
               <th style="text-align: left;">Product Description</th>
               <th style="width: 110px; text-align: left;">Company</th>
-              <th style="width: 65px; text-align: center;">Req Cases</th>
-              <th style="width: 65px; text-align: center;">Remaining</th>
+              <th style="width: 70px; text-align: center;">Total Cases</th>
               <th style="width: 80px; text-align: right;">Rate (₹)</th>
               <th style="width: 55px; text-align: center;">Units</th>
               <th style="width: 105px; text-align: right;">Amount (₹)</th>
             </tr>
           </thead>
           <tbody>
-            ${productRowsHtml || '<tr><td colspan="8" style="text-align:center; padding:16px; color:#64748B;">No products allocated.</td></tr>'}
+            ${productRowsHtml || '<tr><td colspan="7" style="text-align:center; padding:16px; color:#64748B;">No products allocated.</td></tr>'}
           </tbody>
         </table>
 
@@ -1419,12 +1383,12 @@ export const generatePerformaHtml = (performa: any): string => {
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 18px; page-break-inside: avoid;">
           <div style="width: 52%; font-size: 11px; color: #64748B; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 14px; background-color: #FAFAFA;">
             ${performa.notes ? `<div style="font-size: 12px; color: #1E293B; margin-bottom: 6px;"><strong>Notes / Terms:</strong> <em>${performa.notes}</em></div>` : ''}
-            <div style="line-height: 1.4;">• This quotation reserves product requirement allocation. Billed cases will automatically deduct from available customer advance balance.</div>
+            <div style="line-height: 1.4;">• This quotation reserves product requirement allocation.</div>
           </div>
 
           <div class="summary-card">
             <div class="summary-row">
-              <span style="color:#475569;">Total Required Cases:</span><strong style="color:#0F172A;">${performa.totalRequiredCases || performa.totalCases || 0}</strong>
+              <span style="color:#475569;">Total Cases:</span><strong style="color:#0F172A;">${performa.totalRequiredCases || performa.totalCases || 0}</strong>
             </div>
             <div class="summary-row">
               <span style="color:#475569;">Subtotal:</span><strong style="color:#0F172A;">₹ ${formatCurrency(subtotalVal)}</strong>
@@ -1441,29 +1405,8 @@ export const generatePerformaHtml = (performa: any): string => {
             <div class="summary-row" style="color: #475569;">
               <span>Tax (Amount):</span><strong style="font-weight: 700; color: #0F172A;">+ ₹ ${formatCurrency(taxAmt)}</strong>
             </div>` : ''}
-            <div class="summary-row" style="padding-top: 4px; border-top: 1px dashed #CBD5E1;">
-              <span style="color:#0F172A; font-weight: 700;">Total Allocated Value:</span><strong style="color:#0B4DB7; font-weight: 800; font-size: 13.5px;">₹ ${formatCurrency(totalAllocatedVal)}</strong>
-            </div>
-            <div style="height: 1px; background: #CBD5E1; margin: 6px 0;"></div>
-            ${initAdv > 0 ? `
-            <div class="summary-row" style="color: #475569;">
-              <span>Initial Advance:</span><strong style="font-weight: 600;">₹ ${formatCurrency(initAdv)}</strong>
-            </div>` : ''}
-            ${addlCred > 0 ? `
-            <div class="summary-row" style="color: #1E40AF;">
-              <span>Addl Credits / Payments:</span><strong style="font-weight: 600;">+ ₹ ${formatCurrency(addlCred)}</strong>
-            </div>` : ''}
-            <div class="summary-row" style="color: #0B4DB7; padding-top: 3px; border-top: ${(initAdv > 0 && addlCred > 0) ? '1px dashed #CBD5E1' : 'none'};">
-              <span style="font-weight: 700;">Total Credit / Advance:</span><strong style="font-weight: 800;">₹ ${formatCurrency(totalAdvReceived)}</strong>
-            </div>
-            <div class="summary-row" style="color: ${usedAmt > 0 ? '#DC2626' : '#475569'};">
-              <span style="font-weight: 600;">Particulars Purchases (Debit):</span><strong style="font-weight: 700;">- ₹ ${formatCurrency(usedAmt)}</strong>
-            </div>
-            <div class="summary-row" style="padding-top: 4px; border-top: 1px dashed #CBD5E1; margin-top: 3px; font-size: 11.5px; color: ${performaPendingVal > 0 ? '#B91C1C' : '#15803D'};">
-              <span style="font-weight: 700;">Performa Balance to Pay:</span><strong style="font-weight: 800;">${performaPendingVal > 0 ? `₹ ${formatCurrency(performaPendingVal)}` : 'NIL (Fully Paid)'}</strong>
-            </div>
-            <div class="summary-row" style="padding-top: 6px; border-top: 2px solid #0B4DB7; margin-top: 4px; font-size: 13px; color: ${customerAdvBal >= 0 ? '#166534' : '#DC2626'};">
-              <span style="font-weight: 800;">${customerAdvBal >= 0 ? 'Available Advance Balance:' : 'Net Pending Debit:'}</span><strong style="font-weight: 900;">₹ ${formatCurrency(Math.abs(customerAdvBal))}</strong>
+            <div class="summary-row" style="padding-top: 6px; border-top: 2px solid #0B4DB7; margin-top: 4px; font-size: 13px; color: #0B4DB7;">
+              <span style="font-weight: 800;">Total Allocated Value:</span><strong style="font-weight: 900; font-size: 14px;">₹ ${formatCurrency(totalAllocatedVal)}</strong>
             </div>
           </div>
         </div>
@@ -1536,15 +1479,13 @@ export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'P
   let totalCases = 0;
   let totalValue = 0;
   let totalAdvance = 0;
-  let totalUsedAdv = 0;
-  let totalRemainingAdv = 0;
+  let totalBalanceToPay = 0;
 
   const rowsHtml = performas.map((p, idx) => {
     const cases = parseFloat(String(p.totalRequiredCases || p.totalCases || 0)) || 0;
     const value = parseFloat(String(p.totalAllocatedAmount || p.totalAmount || 0)) || 0;
-    const adv = parseFloat(String(p.advanceAmount || p.totalAvailableAmount || 0)) || 0;
-    const usedAdv = parseFloat(String(p.usedAmount !== undefined ? p.usedAmount : (p.advanceUsedAmount || 0))) || 0;
-    const remAdv = parseFloat(String(p.remainingAmount !== undefined ? p.remainingAmount : (p.remainingAdvanceAmount !== undefined ? p.remainingAdvanceAmount : Math.max(0, adv - usedAdv)))) || 0;
+    const adv = parseFloat(String(p.advanceAmount || 0)) || 0;
+    const balanceToPay = Math.max(0, value - adv);
     const custName = p.customerSnapshot?.name || p.customerName || '-';
     const compName = p.companyName || p.customerSnapshot?.companyName || '-';
     const isEven = idx % 2 === 1;
@@ -1552,8 +1493,7 @@ export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'P
     totalCases += cases;
     totalValue += value;
     totalAdvance += adv;
-    totalUsedAdv += usedAdv;
-    totalRemainingAdv += remAdv;
+    totalBalanceToPay += balanceToPay;
 
     return `
       <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
@@ -1564,10 +1504,9 @@ export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'P
         <td style="border: 1px solid #CBD5E1; padding: 6px 6px; color:#475569; font-size:10.5px;">${compName}</td>
         <td class="text-center" style="width:45px; font-weight:800; border: 1px solid #CBD5E1; padding: 6px 4px;">${cases}</td>
         <td class="text-center" style="width:70px; border: 1px solid #CBD5E1; padding: 6px 4px; font-size:10px; font-weight:700; color:${p.status === 'ACTIVE' ? '#16A34A' : '#D97706'};">${p.status || 'ACTIVE'}</td>
-        <td class="text-right" style="font-weight:700; width:90px; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right" style="font-weight:700; width:90px; color:#0B4DB7; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${adv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right" style="font-weight:700; width:90px; color:${usedAdv > 0 ? '#DC2626' : '#64748B'}; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${usedAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right" style="font-weight:800; width:95px; color:#166534; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${remAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right" style="font-weight:700; width:95px; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right" style="font-weight:700; width:95px; color:#0B4DB7; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${adv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right" style="font-weight:800; width:95px; color:${balanceToPay > 0 ? '#DC2626' : '#15803D'}; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${balanceToPay.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
       </tr>
     `;
   }).join('');
@@ -1619,20 +1558,20 @@ export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'P
       <div class="kpi-num">${performas.length}</div>
     </div>
     <div class="kpi-box">
-      <div class="kpi-lbl">Total Req Cases</div>
+      <div class="kpi-lbl">Total Cases</div>
       <div class="kpi-num" style="color:#0B4DB7;">${totalCases}</div>
     </div>
     <div class="kpi-box">
       <div class="kpi-lbl">Total Allocated Value</div>
       <div class="kpi-num" style="color:#0F172A;">₹ ${totalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
     </div>
-    <div class="kpi-box" style="background-color:#FEF2F2; border-color:#FECACA;">
-      <div class="kpi-lbl" style="color:#991B1B;">Total Advance Consumed</div>
-      <div class="kpi-num" style="color:#DC2626;">₹ ${totalUsedAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+    <div class="kpi-box" style="background-color:#EFF6FF; border-color:#BFDBFE;">
+      <div class="kpi-lbl" style="color:#1E40AF;">Total Advance</div>
+      <div class="kpi-num" style="color:#1D4ED8;">₹ ${totalAdvance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
     </div>
-    <div class="kpi-box" style="background-color:#F0FDF4; border-color:#BBF7D0;">
-      <div class="kpi-lbl" style="color:#166534;">Remaining Advance Balance</div>
-      <div class="kpi-num" style="color:#16A34A;">₹ ${totalRemainingAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+    <div class="kpi-box" style="background-color:#FEF2F2; border-color:#FECACA;">
+      <div class="kpi-lbl" style="color:#991B1B;">Total Balance to Pay</div>
+      <div class="kpi-num" style="color:#DC2626;">₹ ${totalBalanceToPay.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
     </div>
   </div>
 
@@ -1646,14 +1585,13 @@ export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'P
         <th>Company</th>
         <th class="text-center" style="width:45px;">Cases</th>
         <th class="text-center" style="width:70px;">Status</th>
-        <th class="text-right" style="width:90px;">Total Value</th>
-        <th class="text-right" style="width:90px;">Total Advance</th>
-        <th class="text-right" style="width:90px;">Adv. Consumed</th>
-        <th class="text-right" style="width:95px;">Rem. Advance</th>
+        <th class="text-right" style="width:95px;">Total Value</th>
+        <th class="text-right" style="width:95px;">Advance Amount</th>
+        <th class="text-right" style="width:95px;">Balance to Pay</th>
       </tr>
     </thead>
     <tbody>
-      ${rowsHtml || '<tr><td colspan="11" class="text-center" style="padding:18px; color:#64748B;">No performa records found for the selected period.</td></tr>'}
+      ${rowsHtml || '<tr><td colspan="10" class="text-center" style="padding:18px; color:#64748B;">No performa records found for the selected period.</td></tr>'}
     </tbody>
     <tfoot>
       <tr class="totals">
@@ -1662,8 +1600,7 @@ export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'P
         <td></td>
         <td class="text-right">₹ ${totalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
         <td class="text-right">₹ ${totalAdvance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right">₹ ${totalUsedAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right">₹ ${totalRemainingAdv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right">₹ ${totalBalanceToPay.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
       </tr>
     </tfoot>
   </table>

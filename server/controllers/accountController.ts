@@ -1,9 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { AccountLedger } from '../models/AccountLedger';
-import { Performa } from '../models/Performa';
-import { PerformaAudit } from '../models/PerformaAudit';
 import { escapeRegex, recalculateCustomerBalance } from '../utils/ledgerUtils';
-import { addCustomerCreditToMasterPerforma, getCustomerMasterPerforma } from '../services/performaConsumptionService';
 
 export const getAccountDetails = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -22,26 +19,36 @@ export const getAccountDetails = async (req: Request, res: Response, next: NextF
 
 export const addCredit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { customerName, customerId, companyName, creditAmount, date, paymentMode, reference, notes, createdBy } = req.body;
+    const { customerName, companyName, creditAmount, date, paymentMode, reference, notes } = req.body;
 
-    const result = await addCustomerCreditToMasterPerforma({
-      customerId,
-      customerName: customerName || 'General',
-      companyName: companyName ? String(companyName).trim() : '',
-      creditAmount,
-      date,
+    const parsedCredit = parseFloat(String(creditAmount).replace(/,/g, '')) || 0;
+    if (parsedCredit <= 0) {
+      res.status(400).json({ success: false, error: 'Valid credit amount greater than 0 is required' });
+      return;
+    }
+
+    const finalCustomerName = (customerName || 'General').trim();
+
+    const ledgerEntry = await AccountLedger.create({
+      billNo: reference ? String(reference).trim() : '',
+      customerName: finalCustomerName,
+      companyName: companyName ? String(companyName).trim() : 'General',
+      date: date || new Date().toISOString().split('T')[0],
+      debit: '0.00',
+      credit: parsedCredit.toFixed(2),
+      balance: '0.00',
       paymentMode: paymentMode || 'Bank',
-      reference,
-      notes,
-      createdBy: createdBy || 'Admin',
+      reference: reference ? String(reference).trim() : '',
+      notes: notes || 'Payment / Credit received',
+      type: 'CREDIT',
     });
+
+    await recalculateCustomerBalance(finalCustomerName);
 
     res.status(201).json({
       success: true,
-      message: 'Credit added successfully and synced to Master Performa',
-      data: result.ledgerEntry,
-      masterPerforma: result.masterPerforma,
-      summary: result.summary,
+      message: 'Credit added successfully',
+      data: ledgerEntry,
     });
   } catch (error: any) {
     console.error('[Add Credit Error]:', error);
@@ -58,7 +65,6 @@ export const deleteAccountEntry = async (req: Request, res: Response, next: Next
     }
 
     const customerName = entry.customerName;
-    const creditAmt = parseFloat(String(entry.credit || '0').replace(/,/g, '')) || 0;
 
     // If this entry was created from a particular bill, delete the corresponding particular bill as well
     const { Particular } = await import('../models/Particular');
@@ -75,34 +81,6 @@ export const deleteAccountEntry = async (req: Request, res: Response, next: Next
         matchCond.companyName = { $regex: new RegExp(`^${escapeRegex(entry.companyName.trim())}$`, 'i') };
       }
       await Particular.findOneAndDelete(matchCond);
-    }
-
-    // If deleting a CREDIT or ADVANCE entry, adjust master performa advance if linked
-    if ((entry.type === 'CREDIT' || entry.type === 'ADVANCE') && creditAmt > 0) {
-      const masterPerforma = await getCustomerMasterPerforma(customerName);
-      if (masterPerforma) {
-        masterPerforma.additionalCredits = Math.max(
-          0,
-          Number(((masterPerforma.additionalCredits || 0) - creditAmt).toFixed(2))
-        );
-        masterPerforma.totalAdvanceReceived = Math.max(
-          0,
-          Number(((masterPerforma.advanceAmount || 0) + masterPerforma.additionalCredits).toFixed(2))
-        );
-        masterPerforma.remainingAdvanceAmount = Math.max(
-          0,
-          Number((masterPerforma.totalAdvanceReceived - (masterPerforma.advanceUsedAmount || 0)).toFixed(2))
-        );
-        await masterPerforma.save();
-      }
-
-      // Delete corresponding audit if any
-      await PerformaAudit.findOneAndDelete({
-        customerName: { $regex: new RegExp(`^${escapeRegex(customerName.trim())}$`, 'i') },
-        amount: creditAmt,
-        date: entry.date,
-        type: 'ADVANCE_RECEIVED',
-      });
     }
 
     await AccountLedger.findByIdAndDelete(req.params.id);
