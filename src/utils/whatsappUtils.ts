@@ -5,6 +5,7 @@ import {
   generateParticularsListPrintHtml,
   generatePerformaHtml,
   generateAllPerformasPrintHtml,
+  generateCustomerListPrintHtml,
 } from './printUtils';
 import type { BillPrintData } from '../components/BillPrintTemplate';
 
@@ -20,18 +21,22 @@ export const normalizeWhatsAppPhone = (phone?: string): string => {
 };
 
 /**
- * Generates an in-memory PDF Blob from raw HTML using html2pdf.js without saving to disk
+ * Generates an in-memory PDF Blob from raw HTML using html2pdf.js matching exact A4 print format
  */
 export const generatePdfBlobFromHtml = async (html: string, fileName: string): Promise<File | null> => {
   return new Promise((resolve) => {
     try {
       const cleanFileName = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
+      const isLandscape = html.includes('size: A4 landscape') || html.includes('landscape');
+      const targetWidth = isLandscape ? 1123 : 794;
+      const targetHeight = isLandscape ? 794 : 1123;
+
       const iframe = document.createElement('iframe');
       iframe.style.position = 'fixed';
       iframe.style.top = '0';
       iframe.style.left = '0';
-      iframe.style.width = '794px';
-      iframe.style.height = '1123px';
+      iframe.style.width = `${targetWidth}px`;
+      iframe.style.height = `${targetHeight}px`;
       iframe.style.zIndex = '-99999';
       iframe.style.opacity = '1';
       iframe.style.visibility = 'visible';
@@ -50,12 +55,19 @@ export const generatePdfBlobFromHtml = async (html: string, fileName: string): P
       doc.write(html);
       doc.close();
 
-      // Allow 350ms for the browser layout engine to render tables, inline CSS, and fonts
+      if (doc.body) {
+        doc.body.style.width = `${targetWidth}px`;
+        doc.body.style.margin = '0';
+        doc.body.style.padding = '0';
+        doc.body.style.backgroundColor = '#FFFFFF';
+      }
+
+      // Allow 400ms for browser layout engine to render tables, inline CSS, borders, and fonts
       setTimeout(async () => {
         try {
           const target = doc.body;
           const opt = {
-            margin: [8, 8, 8, 8],
+            margin: 0,
             filename: cleanFileName,
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: {
@@ -63,11 +75,20 @@ export const generatePdfBlobFromHtml = async (html: string, fileName: string): P
               useCORS: true,
               logging: false,
               backgroundColor: '#FFFFFF',
-              windowWidth: 794,
+              windowWidth: targetWidth,
               scrollX: 0,
               scrollY: 0,
             },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            jsPDF: {
+              unit: 'mm',
+              format: 'a4',
+              orientation: isLandscape ? 'landscape' : 'portrait',
+            },
+            pagebreak: {
+              mode: ['css', 'legacy'],
+              after: ['.print-page', '.page-break-after'],
+              avoid: ['tr', '.data-row', '.sig-section', '.signature-section', '.company-banner', '.kpi-summary-grid', '.page-total-row', '.grand-total-row'],
+            },
           };
 
           const worker = (html2pdf() as any).set(opt).from(target);
@@ -90,7 +111,7 @@ export const generatePdfBlobFromHtml = async (html: string, fileName: string): P
           }
           resolve(null);
         }
-      }, 350);
+      }, 400);
     } catch (e) {
       console.error('[PDF Gen Error]:', e);
       resolve(null);
@@ -100,7 +121,8 @@ export const generatePdfBlobFromHtml = async (html: string, fileName: string): P
 
 /**
  * Base dispatcher: tries Web Share API with attached PDF File;
- * falls back to direct WhatsApp Web/App URL with pre-filled message.
+ * falls back to direct WhatsApp Web/App URL with pre-filled message
+ * AND automatically downloads the exact same generated PDF file on Desktop browsers.
  */
 export const shareToWhatsApp = async (options: {
   title: string;
@@ -110,11 +132,12 @@ export const shareToWhatsApp = async (options: {
   phone?: string;
 }) => {
   const { title, text, fileName, html, phone } = options;
+  const cleanFileName = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
   const cleanPhone = normalizeWhatsAppPhone(phone);
 
   let pdfFile: File | null = null;
   if (html) {
-    pdfFile = await generatePdfBlobFromHtml(html, fileName);
+    pdfFile = await generatePdfBlobFromHtml(html, cleanFileName);
   }
 
   // 1. Try Native Web Share API if device/browser supports file sharing (Mobile, Tablets, Mac/Windows Edge)
@@ -135,7 +158,24 @@ export const shareToWhatsApp = async (options: {
     }
   }
 
-  // 2. WhatsApp URL fallback (Desktop Web / Mobile App deep link)
+  // 2. Direct PDF Download fallback for Desktop browsers:
+  // Automatically saves the exact generated PDF to Downloads so the user can easily attach it in WhatsApp Web
+  if (pdfFile) {
+    try {
+      const blobUrl = URL.createObjectURL(pdfFile);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = blobUrl;
+      downloadLink.download = cleanFileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    } catch (dErr) {
+      console.warn('[Direct PDF Download fallback failed]:', dErr);
+    }
+  }
+
+  // 3. WhatsApp URL fallback (Desktop Web / Mobile App deep link)
   const encodedText = encodeURIComponent(text);
   const waUrl = cleanPhone
     ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`
@@ -355,9 +395,8 @@ export const shareAllPerformasOnWhatsApp = async (
   phone?: string
 ) => {
   const totalPerformas = performas.length;
-  const totalCases = performas.reduce((acc, p) => acc + (parseFloat(p.totalCases) || 0), 0);
-  const totalValue = performas.reduce((acc, p) => acc + (parseFloat(p.totalAmount) || 0), 0);
-  const totalAdvance = performas.reduce((acc, p) => acc + (parseFloat(p.advanceAmount) || 0), 0);
+  const totalCases = performas.reduce((acc, p) => acc + (parseFloat(p.totalCases || p.totalRequiredCases) || 0), 0);
+  const totalValue = performas.reduce((acc, p) => acc + (parseFloat(p.totalAmount || p.totalAllocatedAmount) || 0), 0);
 
   const text = `*DHEEKSHA TRADE - PERFORMA SUMMARY* 📊
 ----------------------------------------
@@ -365,7 +404,6 @@ export const shareAllPerformasOnWhatsApp = async (
 *Total Performas:* ${totalPerformas}
 *Total Cases:* ${totalCases}
 *Total Value:* ₹${totalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-*Total Advance:* ₹${totalAdvance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
 ----------------------------------------
 _Generated on ${new Date().toLocaleDateString('en-GB')}_
 *Dheeksha Trade*`;
@@ -376,6 +414,43 @@ _Generated on ${new Date().toLocaleDateString('en-GB')}_
     title: `Performa Summary - ${summaryTitle}`,
     text,
     fileName: `Performas-Summary-${summaryTitle.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+    html,
+    phone,
+  });
+};
+
+/**
+ * 6. Share Customer List / Master Report on WhatsApp
+ */
+export const shareCustomerListOnWhatsApp = async (
+  customers: any[],
+  reportTitle: string = 'Customers Master Report',
+  fromDate?: string,
+  toDate?: string,
+  phone?: string
+) => {
+  const totalCustomers = customers.length;
+  const totalDebit = customers.reduce((acc, c) => acc + (parseFloat(c.totalDebit) || 0), 0);
+  const totalCredit = customers.reduce((acc, c) => acc + (parseFloat(c.totalCredit) || 0), 0);
+  const totalDue = customers.reduce((acc, c) => acc + (parseFloat(c.pendingDue) || 0), 0);
+
+  const text = `*DHEEKSHA TRADE - CUSTOMERS MASTER REPORT* 👥
+----------------------------------------
+*Title:* ${reportTitle}
+*Total Customers:* ${totalCustomers}
+*Total Purchases (Debit):* ₹${totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+*Total Received (Credit):* ₹${totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+*Total Pending Due:* ₹${totalDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+----------------------------------------
+_Generated on ${new Date().toLocaleDateString('en-GB')}_
+*Dheeksha Trade*`;
+
+  const rangeLabel = fromDate || toDate ? `${fromDate || ''} - ${toDate || ''}` : undefined;
+  const html = generateCustomerListPrintHtml(customers, reportTitle, rangeLabel);
+  await shareToWhatsApp({
+    title: reportTitle,
+    text,
+    fileName: `Customers-Report-${reportTitle.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
     html,
     phone,
   });

@@ -925,130 +925,405 @@ export const generateLedgerStatementHtml = (
   ledgerEntries: any[],
   dateRangeText?: string
 ): string => {
-  const currentDate = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
+  const currentDate = new Date().toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).replace(/\//g, '-');
+  const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+  const PAGE_SIZE = 30;
+  const totalPages = Math.max(1, Math.ceil(ledgerEntries.length / PAGE_SIZE));
+
   let totalDeb = 0;
   let totalCred = 0;
 
-  const rowsHtml = ledgerEntries.map((entry, idx) => {
+  ledgerEntries.forEach((entry) => {
     const deb = parseFloat(String(entry.debit || '0').replace(/,/g, '')) || 0;
     const cred = parseFloat(String(entry.credit || '0').replace(/,/g, '')) || 0;
     totalDeb += deb;
     totalCred += cred;
-    const isEven = idx % 2 === 1;
-
-    return `
-      <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
-        <td class="text-center" style="border: 1px solid #CBD5E1; padding: 6px 4px; color:#64748B;">${idx + 1}</td>
-        <td class="text-center" style="border: 1px solid #CBD5E1; padding: 6px 6px; font-weight:600; color:#334155;">${entry.date || '-'}</td>
-        <td style="border: 1px solid #CBD5E1; padding: 6px 8px; font-weight:700; color:#0F172A;">${entry.billNo ? `Bill #${entry.billNo}` : entry.type || 'PAYMENT / RECEIPT'}</td>
-        <td style="border: 1px solid #CBD5E1; padding: 6px 8px; color:#475569;">${entry.companyName || '-'}</td>
-        <td class="text-right" style="border: 1px solid #CBD5E1; padding: 6px 8px; color:#1E293B; font-weight:700;">${deb > 0 ? `₹ ${deb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
-        <td class="text-right" style="border: 1px solid #CBD5E1; padding: 6px 8px; color:#16A34A; font-weight:700;">${cred > 0 ? `₹ ${cred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
-        <td class="text-right" style="border: 1px solid #CBD5E1; padding: 6px 8px; font-weight:800; color:#0B4DB7;">₹ ${entry.balance || '0.00'}</td>
-      </tr>
-    `;
-  }).join('');
+  });
 
   const netBalance = totalDeb - totalCred;
+
+  const pagesHtml = Array.from({ length: totalPages }).map((_, pageIdx) => {
+    const startIndex = pageIdx * PAGE_SIZE;
+    const pageEntries = ledgerEntries.slice(startIndex, startIndex + PAGE_SIZE);
+    const isFirstPage = pageIdx === 0;
+    const isFinalPage = pageIdx === totalPages - 1;
+
+    let pageDeb = 0;
+    let pageCred = 0;
+
+    pageEntries.forEach((entry) => {
+      const deb = parseFloat(String(entry.debit || '0').replace(/,/g, '')) || 0;
+      const cred = parseFloat(String(entry.credit || '0').replace(/,/g, '')) || 0;
+      pageDeb += deb;
+      pageCred += cred;
+    });
+
+    const pageNet = pageDeb - pageCred;
+
+    const pageRowsHtml = pageEntries.map((entry, localIdx) => {
+      const globalIdx = startIndex + localIdx;
+      const deb = parseFloat(String(entry.debit || '0').replace(/,/g, '')) || 0;
+      const cred = parseFloat(String(entry.credit || '0').replace(/,/g, '')) || 0;
+      const isEven = localIdx % 2 === 1;
+
+      const desc = entry.billNo ? `Bill #${entry.billNo}` : entry.type || 'PAYMENT / RECEIPT';
+
+      return `
+        <tr class="data-row" style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
+          <td class="text-center" style="width:30px;">${globalIdx + 1}</td>
+          <td class="text-center" style="width:75px; color:#334155;">${entry.date || '-'}</td>
+          <td style="font-weight:700; color:#0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">${desc}</td>
+          <td style="color:#475569; font-size:9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 155px;">${entry.companyName || '-'}</td>
+          <td class="text-right" style="width:105px; color:#1E293B; font-weight:700;">${deb > 0 ? `₹ ${deb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
+          <td class="text-right" style="width:105px; color:#16A34A; font-weight:700;">${cred > 0 ? `₹ ${cred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
+          <td class="text-right" style="width:110px; font-weight:800; color:#0B4DB7;">₹ ${entry.balance || '0.00'}</td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <div class="print-page ${isFinalPage ? 'final-page' : ''}">
+        ${
+          isFirstPage
+            ? `
+        <!-- Full Header Banner (Page 1) -->
+        <div class="company-banner">
+          <div>
+            <div class="comp-name">DHEEKSHA TRADE LINK</div>
+            <div class="comp-sub">Wholesale & Retail Trading • Sivakasi</div>
+            <div class="report-heading">ACCOUNT STATEMENT: ${customerName.toUpperCase()}</div>
+            ${dateRangeText ? `<div class="date-badge">${dateRangeText}</div>` : ''}
+          </div>
+          <div class="meta-box">
+            <div>Generated: <span class="meta-bold">${currentDate} ${currentTime}</span></div>
+            <div>Total Transactions: <span class="meta-bold">${ledgerEntries.length} Records</span></div>
+            <div>Page: <span class="meta-bold">1 of ${totalPages}</span></div>
+          </div>
+        </div>
+
+        <!-- Summary Metrics (Page 1) -->
+        <div class="kpi-summary-grid">
+          <div class="kpi-card">
+            <div class="kpi-title">Total Purchases / Debit (Dr)</div>
+            <div class="kpi-val" style="color:#0F172A;">₹ ${totalDeb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-title">Total Received / Credit (Cr)</div>
+            <div class="kpi-val" style="color:#16A34A;">₹ ${totalCred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          </div>
+          <div class="kpi-card" style="background-color:${netBalance > 0 ? '#FEF2F2' : '#F0FDF4'}; border-color:${netBalance > 0 ? '#FECACA' : '#BBF7D0'};">
+            <div class="kpi-title" style="color:${netBalance > 0 ? '#991B1B' : '#166534'};">Net Balance Status</div>
+            <div class="kpi-val" style="color:${netBalance > 0 ? '#DC2626' : '#16A34A'};">
+              ₹ ${Math.abs(netBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${netBalance > 0 ? '(Due Pending)' : netBalance < 0 ? '(Advance Held)' : '(Settled)'}
+            </div>
+          </div>
+        </div>`
+            : `
+        <!-- Compact Header (Subsequent Pages) -->
+        <div class="subsequent-header">
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0F172A; padding-bottom: 4px; margin-bottom: 5px;">
+            <div>
+              <span style="font-size: 15px; font-weight: 900; color: #0B4DB7;">DHEEKSHA TRADE LINK</span>
+              <span style="font-size: 10.5px; font-weight: 700; color: #475569; margin-left: 8px;">• ACCOUNT STATEMENT: ${customerName.toUpperCase()}</span>
+              ${dateRangeText ? `<span class="date-badge" style="margin-left: 8px; font-size: 9px; padding: 1px 6px;">${dateRangeText}</span>` : ''}
+            </div>
+            <div style="font-size: 9.5px; color: #334155; font-weight: 700;">
+              <span>Date: ${currentDate}</span> | <span>Records: ${startIndex + 1} - ${startIndex + pageEntries.length}</span> | <span>Page ${pageIdx + 1} of ${totalPages}</span>
+            </div>
+          </div>
+        </div>`
+        }
+
+        <!-- Master Account Table -->
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="text-center" style="width:30px;">#</th>
+              <th class="text-center" style="width:75px;">Date</th>
+              <th style="width:150px;">Particulars / Description</th>
+              <th style="width:155px;">Company Name</th>
+              <th class="text-right" style="width:105px;">Debit (Dr)</th>
+              <th class="text-right" style="width:105px;">Credit (Cr)</th>
+              <th class="text-right" style="width:110px;">Balance (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pageRowsHtml || '<tr><td colspan="7" class="text-center" style="padding:18px; color:#64748B;">No transaction entries found for the selected period.</td></tr>'}
+          </tbody>
+          <tfoot>
+            <!-- Page Total Row (Bottom of EVERY page) -->
+            <tr class="page-total-row">
+              <td colspan="4" class="text-right" style="padding-right:8px;">PAGE ${pageIdx + 1} TOTAL (${pageEntries.length} Records):</td>
+              <td class="text-right">₹ ${pageDeb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right">₹ ${pageCred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right">
+                ₹ ${Math.abs(pageNet).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${pageNet > 0 ? 'Dr' : pageNet < 0 ? 'Cr' : ''}
+              </td>
+            </tr>
+
+            <!-- Final Page Only: OVERALL GRAND TOTAL -->
+            ${
+              isFinalPage
+                ? `
+            <tr class="grand-total-row">
+              <td colspan="4" class="text-right" style="padding-right:8px;">OVERALL GRAND TOTALS (${ledgerEntries.length} Records):</td>
+              <td class="text-right">₹ ${totalDeb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right">₹ ${totalCred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right">
+                ₹ ${Math.abs(netBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${netBalance > 0 ? 'Dr' : netBalance < 0 ? 'Cr' : ''}
+              </td>
+            </tr>`
+                : ''
+            }
+          </tfoot>
+        </table>
+
+        ${
+          isFinalPage
+            ? `
+        <!-- Signature Section (Final Page Only) -->
+        <div class="signature-section">
+          <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Customer Verification</div>
+          </div>
+          <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Checked & Verified By</div>
+          </div>
+          <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Authorized Signatory</div>
+          </div>
+        </div>`
+            : ''
+        }
+      </div>
+    `;
+  }).join('');
 
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Account Statement - ${customerName}</title>
+  <title>Account Statement - ${customerName} - ${currentDate}</title>
   <style>
-    @page { size: A4 portrait; margin: 8mm 10mm; }
-    *, *:before, *:after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #0F172A; margin:0; padding:8px; background:#fff; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0F172A; padding-bottom: 8px; margin-bottom: 10px; }
-    .title { font-size: 24px; font-weight: 900; color: #0B4DB7; letter-spacing: -0.01em; }
-    .sub { font-size: 10.5px; color: #64748B; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
-    .date-badge { display: inline-block; background: #EFF6FF; color: #0B4DB7; border: 1px solid #BFDBFE; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-top: 4px; }
-    .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
-    .kpi-box { border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px 12px; background: #F8FAFC; }
-    .kpi-lbl { font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase; }
-    .kpi-num { font-size: 15px; font-weight: 900; margin-top: 2px; }
-    .table { width: 100%; border-collapse: collapse; font-size: 11.5px; border: 1px solid #0F172A; }
-    .table th { background: #0F172A; color: #FFFFFF; border: 1px solid #0F172A; padding: 7px 6px; font-weight: 800; font-size: 10.5px; letter-spacing: 0.03em; text-transform: uppercase; }
-    .table td { border: 1px solid #CBD5E1; padding: 6px 6px; }
-    .text-center { text-align: center; }
-    .text-right { text-align: right; }
-    .totals td { background: #0F172A !important; color: #FFFFFF !important; border: 1px solid #0F172A !important; font-weight: 900; font-size: 12px; padding: 8px 6px; }
-    .sig-section { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 26px; padding-top: 14px; border-top: 1px dashed #CBD5E1; font-size: 11px; page-break-inside: avoid; }
+    @page {
+      size: A4 portrait;
+      margin: 6mm 8mm;
+    }
+    *, *:before, *:after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body {
+      background: #ffffff;
+      color: #000000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .print-page {
+      width: 100%;
+      box-sizing: border-box;
+      page-break-after: always;
+      break-after: page;
+      padding: 0;
+    }
+    .print-page:last-child,
+    .print-page.final-page {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    @media screen {
+      .print-page {
+        margin-bottom: 25px;
+        padding-bottom: 25px;
+        border-bottom: 2px dashed #94A3B8;
+      }
+      .print-page:last-child {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
+      }
+    }
+    @media print {
+      .print-page {
+        margin: 0;
+        border: none;
+        padding: 0;
+        page-break-after: always;
+        break-after: page;
+      }
+      .print-page:last-child,
+      .print-page.final-page {
+        page-break-after: auto;
+        break-after: auto;
+      }
+    }
+    .company-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #0F172A;
+      padding-bottom: 4px;
+      margin-bottom: 4px;
+    }
+    .comp-name {
+      font-size: 19px;
+      font-weight: 900;
+      letter-spacing: -0.01em;
+      color: #0B4DB7;
+      line-height: 1.1;
+    }
+    .comp-sub {
+      font-size: 9px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .report-heading {
+      font-size: 12px;
+      font-weight: 800;
+      color: #0F172A;
+      margin-top: 2px;
+    }
+    .date-badge {
+      display: inline-block;
+      background-color: #EFF6FF;
+      color: #0B4DB7;
+      border: 1px solid #BFDBFE;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 9.5px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .meta-box {
+      text-align: right;
+      font-size: 9.5px;
+      color: #334155;
+      line-height: 1.35;
+    }
+    .meta-bold {
+      font-weight: 700;
+      color: #000000;
+    }
+    .kpi-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 5px;
+    }
+    .kpi-card {
+      border: 1px solid #CBD5E1;
+      border-radius: 4px;
+      padding: 3px 6px;
+      background-color: #F8FAFC;
+    }
+    .kpi-title {
+      font-size: 7.5px;
+      font-weight: 700;
+      color: #64748B;
+      text-transform: uppercase;
+      line-height: 1.2;
+    }
+    .kpi-val {
+      font-size: 11.5px;
+      font-weight: 900;
+      color: #0F172A;
+      margin-top: 1px;
+    }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10px;
+      border: 1.5px solid #0F172A;
+      table-layout: fixed;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tfoot {
+      display: table-row-group;
+    }
+    tr {
+      page-break-inside: avoid;
+    }
+    .data-table th {
+      background-color: #0F172A;
+      color: #FFFFFF;
+      font-weight: 800;
+      font-size: 9.5px;
+      padding: 4px 4px;
+      border: 1px solid #0F172A;
+      text-align: left;
+      letter-spacing: 0.02em;
+    }
+    .data-table td {
+      padding: 0 4px;
+      border: 1px solid #CBD5E1;
+      vertical-align: middle;
+    }
+    .data-row {
+      height: 28px;
+    }
+    .text-center {
+      text-align: center !important;
+    }
+    .text-right {
+      text-align: right !important;
+    }
+    .page-total-row td {
+      background-color: #F1F5F9 !important;
+      color: #0F172A !important;
+      border: 1px solid #CBD5E1 !important;
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 3px 4px;
+      height: 23px;
+    }
+    .grand-total-row td {
+      background-color: #0F172A !important;
+      color: #FFFFFF !important;
+      border: 1px solid #0F172A !important;
+      font-size: 10.5px;
+      font-weight: 900;
+      padding: 4px 4px;
+      height: 25px;
+    }
+    .signature-section {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+      padding: 0 15px;
+      page-break-inside: avoid;
+    }
+    .sig-box {
+      text-align: center;
+      width: 160px;
+    }
+    .sig-line {
+      border-top: 1px solid #000000;
+      margin-bottom: 3px;
+    }
+    .sig-label {
+      font-size: 9px;
+      font-weight: 700;
+      color: #334155;
+    }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div>
-      <div class="title">DHEEKSHA TRADE LINK</div>
-      <div class="sub">Wholesale & Retail Trading • Sivakasi</div>
-      <h2 style="font-size:15px; font-weight:800; margin-top:4px; color:#0F172A;">ACCOUNT STATEMENT: ${customerName}</h2>
-      ${dateRangeText ? `<div class="date-badge">${dateRangeText}</div>` : ''}
-    </div>
-    <div style="text-align:right; font-size:11.5px; color:#334155;">
-      <div>Generated Date: <b>${currentDate}</b></div>
-      <div>Total Transactions: <b>${ledgerEntries.length}</b></div>
-      <div>Phone: <b>+91 98765 43210</b></div>
-    </div>
-  </div>
-
-  <!-- KPI Summary Cards -->
-  <div class="kpi-row">
-    <div class="kpi-box">
-      <div class="kpi-lbl">Total Purchases / Debit (Dr)</div>
-      <div class="kpi-num" style="color:#0F172A;">₹ ${totalDeb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-    </div>
-    <div class="kpi-box">
-      <div class="kpi-lbl">Total Received / Credit (Cr)</div>
-      <div class="kpi-num" style="color:#16A34A;">₹ ${totalCred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-    </div>
-    <div class="kpi-box" style="background-color:${netBalance > 0 ? '#FEF2F2' : '#F0FDF4'}; border-color:${netBalance > 0 ? '#FECACA' : '#BBF7D0'};">
-      <div class="kpi-lbl" style="color:${netBalance > 0 ? '#991B1B' : '#166534'};">Net Balance Status</div>
-      <div class="kpi-num" style="color:${netBalance > 0 ? '#DC2626' : '#16A34A'};">
-        ₹ ${Math.abs(netBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${netBalance > 0 ? '(Due Pending)' : netBalance < 0 ? '(Advance Held)' : '(Settled)'}
-      </div>
-    </div>
-  </div>
-
-  <table class="table">
-    <thead>
-      <tr>
-        <th class="text-center" style="width:35px;">#</th>
-        <th class="text-center" style="width:85px;">Date</th>
-        <th>Particulars / Bill No</th>
-        <th>Company Name</th>
-        <th class="text-right" style="width:110px;">Debit (Dr)</th>
-        <th class="text-right" style="width:110px;">Credit (Cr)</th>
-        <th class="text-right" style="width:120px;">Balance (₹)</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rowsHtml || '<tr><td colspan="7" class="text-center" style="padding:18px; color:#64748B;">No transaction entries found for the selected period.</td></tr>'}
-    </tbody>
-    <tfoot>
-      <tr class="totals">
-        <td colspan="4" class="text-right" style="padding-right:10px;">GRAND TOTALS:</td>
-        <td class="text-right">₹ ${totalDeb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right">₹ ${totalCred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right">
-          ₹ ${Math.abs(netBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${netBalance > 0 ? 'Dr' : 'Cr'}
-        </td>
-      </tr>
-    </tfoot>
-  </table>
-
-  <!-- Signatures -->
-  <div class="sig-section">
-    <div style="text-align:center; width:160px;">
-      <div style="height:28px;"></div>
-      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Customer Verification</div>
-    </div>
-    <div style="text-align:center; width:160px;">
-      <div style="font-weight:700; margin-bottom:24px;">For Dheeksha Trade Link</div>
-      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Authorized Signatory</div>
-    </div>
-  </div>
+  ${pagesHtml}
 </body>
 </html>
   `;
@@ -1063,38 +1338,193 @@ export const printLedgerStatementDirectly = (customerName: string, ledgerEntries
  * Print Particulars Bills Master List (A4 Standard)
  */
 export const generateParticularsListPrintHtml = (particulars: any[], dateRangeText?: string): string => {
-  const currentDate = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
-  let totalSum = 0;
-  let totalSubtotalSum = 0;
-  let totalCasesSum = 0;
+  const currentDate = new Date().toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).replace(/\//g, '-');
+  const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-  const rowsHtml = particulars.map((p, idx) => {
+  const PAGE_SIZE = 30;
+  const totalPages = Math.max(1, Math.ceil(particulars.length / PAGE_SIZE));
+
+  let overallTotalSum = 0;
+  let overallSubtotalSum = 0;
+  let overallCasesSum = 0;
+
+  particulars.forEach((p) => {
     const amt = parseFloat(String(p.total || p.amount || '0').replace(/,/g, '')) || 0;
     const subAmt = parseFloat(String(p.amount || p.total || '0').replace(/,/g, '')) || amt;
     const cases = parseFloat(String(p.caseCount || '0')) || 0;
-    totalSum += amt;
-    totalSubtotalSum += subAmt;
-    totalCasesSum += cases;
-    const isEven = idx % 2 === 1;
+    overallTotalSum += amt;
+    overallSubtotalSum += subAmt;
+    overallCasesSum += cases;
+  });
 
-    const discStr = p.discount && String(p.discount).trim() !== '' && p.discount !== '0' ? String(p.discount) : '-';
-    const packStr = p.packing && String(p.packing).trim() !== '' && p.packing !== '0' ? String(p.packing) : '-';
-    const taxStr = p.tax && String(p.tax).trim() !== '' && p.tax !== '0' ? `₹${p.tax}` : '-';
+  const pagesHtml = Array.from({ length: totalPages }).map((_, pageIdx) => {
+    const startIndex = pageIdx * PAGE_SIZE;
+    const pageItems = particulars.slice(startIndex, startIndex + PAGE_SIZE);
+    const isFirstPage = pageIdx === 0;
+    const isFinalPage = pageIdx === totalPages - 1;
+
+    let pageTotalSum = 0;
+    let pageSubtotalSum = 0;
+    let pageCasesSum = 0;
+
+    pageItems.forEach((p) => {
+      const amt = parseFloat(String(p.total || p.amount || '0').replace(/,/g, '')) || 0;
+      const subAmt = parseFloat(String(p.amount || p.total || '0').replace(/,/g, '')) || amt;
+      const cases = parseFloat(String(p.caseCount || '0')) || 0;
+      pageTotalSum += amt;
+      pageSubtotalSum += subAmt;
+      pageCasesSum += cases;
+    });
+
+    const pageRowsHtml = pageItems.map((p, localIdx) => {
+      const globalIdx = startIndex + localIdx;
+      const isEven = localIdx % 2 === 1;
+      const amt = parseFloat(String(p.total || p.amount || '0').replace(/,/g, '')) || 0;
+      const subAmt = parseFloat(String(p.amount || p.total || '0').replace(/,/g, '')) || amt;
+
+      const discStr = p.discount && String(p.discount).trim() !== '' && p.discount !== '0' && p.discount !== '-' ? String(p.discount) : '-';
+      const packStr = p.packing && String(p.packing).trim() !== '' && p.packing !== '0' && p.packing !== '-' ? String(p.packing) : '-';
+      const taxStr = p.tax && String(p.tax).trim() !== '' && p.tax !== '0' && p.tax !== '-' ? `₹${p.tax}` : '-';
+
+      return `
+        <tr class="data-row" style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
+          <td class="text-center" style="width:26px;">${globalIdx + 1}</td>
+          <td class="text-center" style="font-weight:800; color:#0B4DB7; width:52px;">#${p.billNo || '-'}</td>
+          <td class="text-center" style="width:65px; color:#334155;">${p.date || '-'}</td>
+          <td style="font-weight:700; color:#0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;">${p.customerName || '-'}</td>
+          <td style="color:#475569; font-size:9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 105px;">${p.companyName || '-'}</td>
+          <td class="text-center" style="width:38px; font-weight:700;">${p.caseCount || '-'}</td>
+          <td class="text-right" style="width:72px; color:#334155;">₹ ${subAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+          <td class="text-center" style="width:42px; color:${discStr !== '-' ? '#DC2626' : '#94A3B8'}; font-weight:600;">${discStr}</td>
+          <td class="text-center" style="width:42px; color:${packStr !== '-' ? '#0F172A' : '#94A3B8'}; font-weight:600;">${packStr}</td>
+          <td class="text-center" style="width:42px; color:${taxStr !== '-' ? '#0F172A' : '#94A3B8'}; font-weight:600;">${taxStr}</td>
+          <td class="text-right" style="font-weight:800; width:82px; color:#0F172A;">₹ ${amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        </tr>
+      `;
+    }).join('');
 
     return `
-      <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
-        <td class="text-center" style="width:30px; border: 1px solid #CBD5E1; padding: 6px 4px; color:#64748B;">${idx + 1}</td>
-        <td class="text-center" style="font-weight:800; color:#0B4DB7; width:70px; border: 1px solid #CBD5E1; padding: 6px 4px;">#${p.billNo || '-'}</td>
-        <td class="text-center" style="width:75px; border: 1px solid #CBD5E1; padding: 6px 4px; color:#334155;">${p.date || '-'}</td>
-        <td style="font-weight:700; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">${p.customerName || '-'}</td>
-        <td style="border: 1px solid #CBD5E1; padding: 6px 6px; color:#475569; font-size:10.5px;">${p.companyName || '-'}</td>
-        <td class="text-center" style="width:50px; font-weight:700; border: 1px solid #CBD5E1; padding: 6px 4px;">${p.caseCount || '-'}</td>
-        <td class="text-right" style="width:90px; border: 1px solid #CBD5E1; padding: 6px 6px; color:#334155;">₹ ${subAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-center" style="width:65px; border: 1px solid #CBD5E1; padding: 6px 4px; color:${discStr !== '-' ? '#DC2626' : '#94A3B8'}; font-weight:600;">${discStr}</td>
-        <td class="text-center" style="width:65px; border: 1px solid #CBD5E1; padding: 6px 4px; color:${packStr !== '-' ? '#0F172A' : '#94A3B8'}; font-weight:600;">${packStr}</td>
-        <td class="text-center" style="width:65px; border: 1px solid #CBD5E1; padding: 6px 4px; color:${taxStr !== '-' ? '#0F172A' : '#94A3B8'}; font-weight:600;">${taxStr}</td>
-        <td class="text-right" style="font-weight:800; width:110px; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 8px;">₹ ${amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-      </tr>
+      <div class="print-page ${isFinalPage ? 'final-page' : ''}">
+        ${
+          isFirstPage
+            ? `
+        <!-- Full Header Banner (Page 1) -->
+        <div class="company-banner">
+          <div>
+            <div class="comp-name">DHEEKSHA TRADE LINK</div>
+            <div class="comp-sub">Wholesale & Retail Trading • Sivakasi</div>
+            <div class="report-heading">PARTICULARS BILLS MASTER REPORT</div>
+            ${dateRangeText ? `<div class="date-badge">${dateRangeText}</div>` : ''}
+          </div>
+          <div class="meta-box">
+            <div>Generated: <span class="meta-bold">${currentDate} ${currentTime}</span></div>
+            <div>Total Records: <span class="meta-bold">${particulars.length} Bills</span></div>
+            <div>Page: <span class="meta-bold">1 of ${totalPages}</span></div>
+          </div>
+        </div>
+
+        <!-- Summary Metrics (Page 1) -->
+        <div class="kpi-summary-grid">
+          <div class="kpi-card">
+            <div class="kpi-title">Total Bills Count</div>
+            <div class="kpi-val">${particulars.length}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-title">Total Cases Billed</div>
+            <div class="kpi-val" style="color:#0B4DB7;">${overallCasesSum}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-title">Total Billed Amount</div>
+            <div class="kpi-val" style="color:#16A34A;">₹ ${overallTotalSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          </div>
+        </div>`
+            : `
+        <!-- Compact Header (Subsequent Pages) -->
+        <div class="subsequent-header">
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0F172A; padding-bottom: 4px; margin-bottom: 5px;">
+            <div>
+              <span style="font-size: 15px; font-weight: 900; color: #0B4DB7;">DHEEKSHA TRADE LINK</span>
+              <span style="font-size: 10.5px; font-weight: 700; color: #475569; margin-left: 8px;">• PARTICULARS BILLS MASTER REPORT</span>
+              ${dateRangeText ? `<span class="date-badge" style="margin-left: 8px; font-size: 9px; padding: 1px 6px;">${dateRangeText}</span>` : ''}
+            </div>
+            <div style="font-size: 9.5px; color: #334155; font-weight: 700;">
+              <span>Date: ${currentDate}</span> | <span>Records: ${startIndex + 1} - ${startIndex + pageItems.length}</span> | <span>Page ${pageIdx + 1} of ${totalPages}</span>
+            </div>
+          </div>
+        </div>`
+        }
+
+        <!-- Master Particulars Table -->
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="text-center" style="width:26px;">#</th>
+              <th class="text-center" style="width:52px;">Bill No</th>
+              <th class="text-center" style="width:65px;">Date</th>
+              <th style="width:140px;">Customer Name</th>
+              <th style="width:105px;">Company</th>
+              <th class="text-center" style="width:38px;">Cases</th>
+              <th class="text-right" style="width:72px;">Subtotal</th>
+              <th class="text-center" style="width:42px;">Disc</th>
+              <th class="text-center" style="width:42px;">Pack</th>
+              <th class="text-center" style="width:42px;">Tax</th>
+              <th class="text-right" style="width:82px;">Net Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pageRowsHtml || '<tr><td colspan="11" class="text-center" style="padding:18px; color:#64748B;">No bill records found for the selected period.</td></tr>'}
+          </tbody>
+          <tfoot>
+            <!-- Page Total Row (Bottom of EVERY page) -->
+            <tr class="page-total-row">
+              <td colspan="5" class="text-right" style="padding-right:8px;">PAGE ${pageIdx + 1} TOTAL (${pageItems.length} Bills):</td>
+              <td class="text-center">${pageCasesSum}</td>
+              <td class="text-right">₹ ${pageSubtotalSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td colspan="3"></td>
+              <td class="text-right">₹ ${pageTotalSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+
+            <!-- Final Page Only: OVERALL GRAND TOTAL -->
+            ${
+              isFinalPage
+                ? `
+            <tr class="grand-total-row">
+              <td colspan="5" class="text-right" style="padding-right:8px;">OVERALL GRAND TOTAL (${particulars.length} Bills):</td>
+              <td class="text-center">${overallCasesSum}</td>
+              <td class="text-right">₹ ${overallSubtotalSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td colspan="3"></td>
+              <td class="text-right">₹ ${overallTotalSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>`
+                : ''
+            }
+          </tfoot>
+        </table>
+
+        ${
+          isFinalPage
+            ? `
+        <!-- Signature Section (Final Page Only) -->
+        <div class="signature-section">
+          <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Prepared By</div>
+          </div>
+          <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Checked & Verified By</div>
+          </div>
+          <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Authorized Signatory</div>
+          </div>
+        </div>`
+            : ''
+        }
+      </div>
     `;
   }).join('');
 
@@ -1105,100 +1535,216 @@ export const generateParticularsListPrintHtml = (particulars: any[], dateRangeTe
   <meta charset="utf-8" />
   <title>Particulars Bills Master Report - ${currentDate}</title>
   <style>
-    @page { size: A4 landscape; margin: 8mm 10mm; }
-    *, *:before, *:after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #0F172A; margin:0; padding:8px; background:#fff; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0F172A; padding-bottom: 8px; margin-bottom: 10px; }
-    .title { font-size: 24px; font-weight: 900; color: #0B4DB7; letter-spacing: -0.01em; }
-    .date-badge { display: inline-block; background: #EFF6FF; color: #0B4DB7; border: 1px solid #BFDBFE; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-top: 4px; }
-    .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
-    .kpi-box { border: 1px solid #CBD5E1; border-radius: 6px; padding: 7px 12px; background: #F8FAFC; }
-    .kpi-lbl { font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase; }
-    .kpi-num { font-size: 15px; font-weight: 900; margin-top: 2px; color: #0F172A; }
-    .table { width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #0F172A; }
-    .table th { background: #0F172A; color: #FFFFFF; border: 1px solid #0F172A; padding: 6px 4px; font-weight: 800; font-size: 10px; text-transform: uppercase; }
-    .table td { border: 1px solid #CBD5E1; padding: 5px 6px; }
-    .text-center { text-align: center; }
-    .text-right { text-align: right; }
-    .totals td { background: #0F172A !important; color: #FFFFFF !important; border: 1px solid #0F172A !important; font-weight: 900; font-size: 11px; padding: 7px 6px; }
-    .sig-section { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 24px; padding-top: 12px; border-top: 1px dashed #CBD5E1; font-size: 11px; page-break-inside: avoid; }
+    @page {
+      size: A4 portrait;
+      margin: 6mm 8mm;
+    }
+    *, *:before, *:after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body {
+      background: #ffffff;
+      color: #000000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .print-page {
+      width: 100%;
+      box-sizing: border-box;
+      page-break-after: always;
+      break-after: page;
+      padding: 0;
+    }
+    .print-page:last-child,
+    .print-page.final-page {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    @media screen {
+      .print-page {
+        margin-bottom: 25px;
+        padding-bottom: 25px;
+        border-bottom: 2px dashed #94A3B8;
+      }
+      .print-page:last-child {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
+      }
+    }
+    @media print {
+      .print-page {
+        margin: 0;
+        border: none;
+        padding: 0;
+        page-break-after: always;
+        break-after: page;
+      }
+      .print-page:last-child,
+      .print-page.final-page {
+        page-break-after: auto;
+        break-after: auto;
+      }
+    }
+    .company-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #0F172A;
+      padding-bottom: 4px;
+      margin-bottom: 4px;
+    }
+    .comp-name {
+      font-size: 19px;
+      font-weight: 900;
+      letter-spacing: -0.01em;
+      color: #0B4DB7;
+      line-height: 1.1;
+    }
+    .comp-sub {
+      font-size: 9px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .report-heading {
+      font-size: 12px;
+      font-weight: 800;
+      color: #0F172A;
+      margin-top: 2px;
+    }
+    .date-badge {
+      display: inline-block;
+      background-color: #EFF6FF;
+      color: #0B4DB7;
+      border: 1px solid #BFDBFE;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 9.5px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .meta-box {
+      text-align: right;
+      font-size: 9.5px;
+      color: #334155;
+      line-height: 1.35;
+    }
+    .meta-bold {
+      font-weight: 700;
+      color: #000000;
+    }
+    .kpi-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 5px;
+    }
+    .kpi-card {
+      border: 1px solid #CBD5E1;
+      border-radius: 4px;
+      padding: 3px 6px;
+      background-color: #F8FAFC;
+    }
+    .kpi-title {
+      font-size: 7.5px;
+      font-weight: 700;
+      color: #64748B;
+      text-transform: uppercase;
+      line-height: 1.2;
+    }
+    .kpi-val {
+      font-size: 11.5px;
+      font-weight: 900;
+      color: #0F172A;
+      margin-top: 1px;
+    }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5px;
+      border: 1.5px solid #0F172A;
+      table-layout: fixed;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tfoot {
+      display: table-row-group;
+    }
+    tr {
+      page-break-inside: avoid;
+    }
+    .data-table th {
+      background-color: #0F172A;
+      color: #FFFFFF;
+      font-weight: 800;
+      font-size: 9px;
+      padding: 4px 3px;
+      border: 1px solid #0F172A;
+      text-align: left;
+      letter-spacing: 0.02em;
+    }
+    .data-table td {
+      padding: 0 3px;
+      border: 1px solid #CBD5E1;
+      vertical-align: middle;
+    }
+    .data-row {
+      height: 28px;
+    }
+    .text-center {
+      text-align: center !important;
+    }
+    .text-right {
+      text-align: right !important;
+    }
+    .page-total-row td {
+      background-color: #F1F5F9 !important;
+      color: #0F172A !important;
+      border: 1px solid #CBD5E1 !important;
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 3px 3px;
+      height: 23px;
+    }
+    .grand-total-row td {
+      background-color: #0F172A !important;
+      color: #FFFFFF !important;
+      border: 1px solid #0F172A !important;
+      font-size: 10px;
+      font-weight: 900;
+      padding: 4px 3px;
+      height: 24px;
+    }
+    .signature-section {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+      padding: 0 15px;
+      page-break-inside: avoid;
+    }
+    .sig-box {
+      text-align: center;
+      width: 160px;
+    }
+    .sig-line {
+      border-top: 1px solid #000000;
+      margin-bottom: 3px;
+    }
+    .sig-label {
+      font-size: 9px;
+      font-weight: 700;
+      color: #334155;
+    }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div>
-      <div class="title">DHEEKSHA TRADE LINK</div>
-      <div style="font-size:10.5px; font-weight:700; color:#475569; text-transform:uppercase;">Wholesale & Retail Trading • Sivakasi</div>
-      <h2 style="font-size:15px; font-weight:800; margin-top:4px; color:#0F172A;">PARTICULARS BILLS MASTER REPORT</h2>
-      ${dateRangeText ? `<div class="date-badge">${dateRangeText}</div>` : ''}
-    </div>
-    <div style="text-align:right; font-size:11.5px; color:#334155;">
-      <div>Generated Date: <b>${currentDate}</b></div>
-      <div>Total Records: <b>${particulars.length} Bills</b></div>
-    </div>
-  </div>
-
-  <!-- KPI Cards -->
-  <div class="kpi-row">
-    <div class="kpi-box">
-      <div class="kpi-lbl">Total Bills Count</div>
-      <div class="kpi-num">${particulars.length}</div>
-    </div>
-    <div class="kpi-box">
-      <div class="kpi-lbl">Total Cases Billed</div>
-      <div class="kpi-num" style="color:#0B4DB7;">${totalCasesSum}</div>
-    </div>
-    <div class="kpi-box">
-      <div class="kpi-lbl">Total Billed Amount</div>
-      <div class="kpi-num" style="color:#16A34A;">₹ ${totalSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-    </div>
-  </div>
-
-  <table class="table">
-    <thead>
-      <tr>
-        <th class="text-center" style="width:30px;">#</th>
-        <th class="text-center" style="width:70px;">Bill No</th>
-        <th class="text-center" style="width:75px;">Date</th>
-        <th>Customer Name</th>
-        <th>Company</th>
-        <th class="text-center" style="width:50px;">Cases</th>
-        <th class="text-right" style="width:90px;">Subtotal (₹)</th>
-        <th class="text-center" style="width:65px;">Discount</th>
-        <th class="text-center" style="width:65px;">Packing</th>
-        <th class="text-center" style="width:65px;">Tax (₹)</th>
-        <th class="text-right" style="width:110px;">Net Total (₹)</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rowsHtml || '<tr><td colspan="11" class="text-center" style="padding:18px; color:#64748B;">No bill records found for the selected period.</td></tr>'}
-    </tbody>
-    <tfoot>
-      <tr class="totals">
-        <td colspan="5" class="text-right" style="padding-right:10px;">GRAND TOTAL (${particulars.length} Bills):</td>
-        <td class="text-center">${totalCasesSum}</td>
-        <td class="text-right">₹ ${totalSubtotalSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td colspan="3"></td>
-        <td class="text-right">₹ ${totalSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-      </tr>
-    </tfoot>
-  </table>
-
-  <!-- Signatures -->
-  <div class="sig-section">
-    <div style="text-align:center; width:150px;">
-      <div style="height:24px;"></div>
-      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Prepared By</div>
-    </div>
-    <div style="text-align:center; width:150px;">
-      <div style="height:24px;"></div>
-      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Checked & Verified</div>
-    </div>
-    <div style="text-align:center; width:150px;">
-      <div style="font-weight:700; margin-bottom:20px;">For Dheeksha Trade Link</div>
-      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Authorized Signatory</div>
-    </div>
-  </div>
+  ${pagesHtml}
 </body>
 </html>
   `;
@@ -1609,39 +2155,173 @@ export const generatePerformaHtml = (performa: any): string => {
  * Print All Performas Master List (A4 Standard)
  */
 export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'PERFORMAS MASTER SUMMARY', dateRangeText?: string): string => {
-  const currentDate = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
-  let totalCases = 0;
-  let totalValue = 0;
-  let totalAdvance = 0;
-  let totalBalanceToPay = 0;
+  const currentDate = new Date().toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).replace(/\//g, '-');
+  const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-  const rowsHtml = performas.map((p, idx) => {
-    const cases = parseFloat(String(p.totalRequiredCases || p.totalCases || 0)) || 0;
-    const value = parseFloat(String(p.totalAllocatedAmount || p.totalAmount || 0)) || 0;
-    const adv = parseFloat(String(p.advanceAmount || 0)) || 0;
-    const balanceToPay = Math.max(0, value - adv);
-    const custName = p.customerSnapshot?.name || p.customerName || '-';
-    const compName = p.companyName || p.customerSnapshot?.companyName || '-';
-    const isEven = idx % 2 === 1;
+  const PAGE_SIZE = 30;
+  const totalPages = Math.max(1, Math.ceil(performas.length / PAGE_SIZE));
 
-    totalCases += cases;
-    totalValue += value;
-    totalAdvance += adv;
-    totalBalanceToPay += balanceToPay;
+  let overallTotalCases = 0;
+  let overallTotalValue = 0;
+
+  performas.forEach((p) => {
+    overallTotalCases += parseFloat(String(p.totalRequiredCases || p.totalCases || 0)) || 0;
+    overallTotalValue += parseFloat(String(p.totalAllocatedAmount || p.totalAmount || 0)) || 0;
+  });
+
+  const pagesHtml = Array.from({ length: totalPages }).map((_, pageIdx) => {
+    const startIndex = pageIdx * PAGE_SIZE;
+    const pageItems = performas.slice(startIndex, startIndex + PAGE_SIZE);
+    const isFirstPage = pageIdx === 0;
+    const isFinalPage = pageIdx === totalPages - 1;
+
+    let pageCases = 0;
+    let pageValue = 0;
+
+    pageItems.forEach((p) => {
+      pageCases += parseFloat(String(p.totalRequiredCases || p.totalCases || 0)) || 0;
+      pageValue += parseFloat(String(p.totalAllocatedAmount || p.totalAmount || 0)) || 0;
+    });
+
+    const pageRowsHtml = pageItems.map((p, localIdx) => {
+      const globalIdx = startIndex + localIdx;
+      const isEven = localIdx % 2 === 1;
+      const cases = parseFloat(String(p.totalRequiredCases || p.totalCases || 0)) || 0;
+      const value = parseFloat(String(p.totalAllocatedAmount || p.totalAmount || 0)) || 0;
+      const custName = p.customerSnapshot?.name || p.customerName || '-';
+      const compName = p.companyName || p.customerSnapshot?.companyName || '-';
+
+      return `
+        <tr class="data-row" style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
+          <td class="text-center" style="width:30px;">${globalIdx + 1}</td>
+          <td class="text-center" style="font-weight:800; color:#0B4DB7; width:65px;">#${p.performaNumber || '-'}</td>
+          <td class="text-center" style="width:75px; color:#334155;">${p.date || '-'}</td>
+          <td style="font-weight:700; color:#0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;">${custName}</td>
+          <td style="color:#475569; font-size:9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">${compName}</td>
+          <td class="text-center" style="width:50px; font-weight:800;">${cases}</td>
+          <td class="text-center" style="width:70px; font-size:9.5px; font-weight:700; color:${p.status === 'ACTIVE' ? '#16A34A' : '#0B4DB7'};">${p.status || 'ACTIVE'}</td>
+          <td class="text-right" style="font-weight:800; width:110px; color:#0F172A;">₹ ${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        </tr>
+      `;
+    }).join('');
 
     return `
-      <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
-        <td class="text-center" style="width:30px; border: 1px solid #CBD5E1; padding: 6px 4px; color:#64748B;">${idx + 1}</td>
-        <td class="text-center" style="font-weight:800; color:#0B4DB7; width:75px; border: 1px solid #CBD5E1; padding: 6px 4px;">#${p.performaNumber || '-'}</td>
-        <td class="text-center" style="width:75px; border: 1px solid #CBD5E1; padding: 6px 4px; color:#334155;">${p.date || '-'}</td>
-        <td style="font-weight:700; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 6px;">${custName}</td>
-        <td style="border: 1px solid #CBD5E1; padding: 6px 6px; color:#475569; font-size:10.5px;">${compName}</td>
-        <td class="text-center" style="width:45px; font-weight:800; border: 1px solid #CBD5E1; padding: 6px 4px;">${cases}</td>
-        <td class="text-center" style="width:70px; border: 1px solid #CBD5E1; padding: 6px 4px; font-size:10px; font-weight:700; color:${p.status === 'ACTIVE' ? '#16A34A' : '#D97706'};">${p.status || 'ACTIVE'}</td>
-        <td class="text-right" style="font-weight:700; width:95px; color:#0F172A; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right" style="font-weight:700; width:95px; color:#0B4DB7; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${adv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right" style="font-weight:800; width:95px; color:${balanceToPay > 0 ? '#DC2626' : '#15803D'}; border: 1px solid #CBD5E1; padding: 6px 6px;">₹ ${balanceToPay.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-      </tr>
+      <div class="print-page ${isFinalPage ? 'final-page' : ''}">
+        ${
+          isFirstPage
+            ? `
+        <!-- Full Header Banner (Page 1) -->
+        <div class="company-banner">
+          <div>
+            <div class="comp-name">DHEEKSHA TRADE LINK</div>
+            <div class="comp-sub">Wholesale & Retail Trading • Sivakasi</div>
+            <div class="report-heading">${reportTitle}</div>
+            ${dateRangeText ? `<div class="date-badge">${dateRangeText}</div>` : ''}
+          </div>
+          <div class="meta-box">
+            <div>Generated: <span class="meta-bold">${currentDate} ${currentTime}</span></div>
+            <div>Total Records: <span class="meta-bold">${performas.length} Performas</span></div>
+            <div>Page: <span class="meta-bold">1 of ${totalPages}</span></div>
+          </div>
+        </div>
+
+        <!-- Summary Metrics (Page 1) -->
+        <div class="kpi-summary-grid">
+          <div class="kpi-card">
+            <div class="kpi-title">Total Performas</div>
+            <div class="kpi-val">${performas.length}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-title">Total Cases</div>
+            <div class="kpi-val" style="color:#0B4DB7;">${overallTotalCases}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-title">Total Allocated Value</div>
+            <div class="kpi-val" style="color:#16A34A;">₹ ${overallTotalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          </div>
+        </div>`
+            : `
+        <!-- Compact Header (Subsequent Pages) -->
+        <div class="subsequent-header">
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0F172A; padding-bottom: 4px; margin-bottom: 5px;">
+            <div>
+              <span style="font-size: 15px; font-weight: 900; color: #0B4DB7;">DHEEKSHA TRADE LINK</span>
+              <span style="font-size: 10.5px; font-weight: 700; color: #475569; margin-left: 8px;">• ${reportTitle}</span>
+              ${dateRangeText ? `<span class="date-badge" style="margin-left: 8px; font-size: 9px; padding: 1px 6px;">${dateRangeText}</span>` : ''}
+            </div>
+            <div style="font-size: 9.5px; color: #334155; font-weight: 700;">
+              <span>Date: ${currentDate}</span> | <span>Records: ${startIndex + 1} - ${startIndex + pageItems.length}</span> | <span>Page ${pageIdx + 1} of ${totalPages}</span>
+            </div>
+          </div>
+        </div>`
+        }
+
+        <!-- Master Performas Table -->
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="text-center" style="width:30px;">#</th>
+              <th class="text-center" style="width:65px;">Performa #</th>
+              <th class="text-center" style="width:75px;">Date</th>
+              <th style="width:180px;">Customer Name</th>
+              <th style="width:150px;">Company</th>
+              <th class="text-center" style="width:50px;">Cases</th>
+              <th class="text-center" style="width:70px;">Status</th>
+              <th class="text-right" style="width:110px;">Total Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pageRowsHtml || '<tr><td colspan="8" class="text-center" style="padding:18px; color:#64748B;">No performa records found for the selected period.</td></tr>'}
+          </tbody>
+          <tfoot>
+            <!-- Page Total Row (Bottom of EVERY page) -->
+            <tr class="page-total-row">
+              <td colspan="5" class="text-right" style="padding-right:8px;">PAGE ${pageIdx + 1} TOTAL (${pageItems.length} Performas):</td>
+              <td class="text-center">${pageCases}</td>
+              <td></td>
+              <td class="text-right">₹ ${pageValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+
+            <!-- Final Page Only: OVERALL GRAND TOTAL -->
+            ${
+              isFinalPage
+                ? `
+            <tr class="grand-total-row">
+              <td colspan="5" class="text-right" style="padding-right:8px;">OVERALL GRAND TOTAL (${performas.length} Performas):</td>
+              <td class="text-center">${overallTotalCases}</td>
+              <td></td>
+              <td class="text-right">₹ ${overallTotalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>`
+                : ''
+            }
+          </tfoot>
+        </table>
+
+        ${
+          isFinalPage
+            ? `
+        <!-- Signature Section (Final Page Only) -->
+        <div class="signature-section">
+          <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Prepared By</div>
+          </div>
+          <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Checked & Verified By</div>
+          </div>
+          <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Authorized Signatory</div>
+          </div>
+        </div>`
+            : ''
+        }
+      </div>
     `;
   }).join('');
 
@@ -1652,108 +2332,216 @@ export const generateAllPerformasPrintHtml = (performas: any[], reportTitle = 'P
   <meta charset="utf-8" />
   <title>${reportTitle} - ${currentDate}</title>
   <style>
-    @page { size: A4 landscape; margin: 8mm 10mm; }
-    *, *:before, *:after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #0F172A; margin:0; padding:8px; background:#fff; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0F172A; padding-bottom: 8px; margin-bottom: 10px; }
-    .title { font-size: 24px; font-weight: 900; color: #0B4DB7; letter-spacing: -0.01em; }
-    .date-badge { display: inline-block; background: #EFF6FF; color: #0B4DB7; border: 1px solid #BFDBFE; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-top: 4px; }
-    .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 10px; }
-    .kpi-box { border: 1px solid #CBD5E1; border-radius: 6px; padding: 7px 10px; background: #F8FAFC; }
-    .kpi-lbl { font-size: 9.5px; font-weight: 700; color: #64748B; text-transform: uppercase; }
-    .kpi-num { font-size: 14px; font-weight: 900; margin-top: 2px; color: #0F172A; }
-    .table { width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #0F172A; }
-    .table th { background: #0F172A; color: #FFFFFF; border: 1px solid #0F172A; padding: 6px 4px; font-weight: 800; font-size: 10px; text-transform: uppercase; }
-    .table td { border: 1px solid #CBD5E1; padding: 5px 6px; }
-    .text-center { text-align: center; }
-    .text-right { text-align: right; }
-    .totals td { background: #0F172A !important; color: #FFFFFF !important; border: 1px solid #0F172A !important; font-weight: 900; font-size: 11px; padding: 7px 6px; }
-    .sig-section { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 22px; padding-top: 12px; border-top: 1px dashed #CBD5E1; font-size: 11px; page-break-inside: avoid; }
+    @page {
+      size: A4 portrait;
+      margin: 6mm 8mm;
+    }
+    *, *:before, *:after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body {
+      background: #ffffff;
+      color: #000000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .print-page {
+      width: 100%;
+      box-sizing: border-box;
+      page-break-after: always;
+      break-after: page;
+      padding: 0;
+    }
+    .print-page:last-child,
+    .print-page.final-page {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    @media screen {
+      .print-page {
+        margin-bottom: 25px;
+        padding-bottom: 25px;
+        border-bottom: 2px dashed #94A3B8;
+      }
+      .print-page:last-child {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
+      }
+    }
+    @media print {
+      .print-page {
+        margin: 0;
+        border: none;
+        padding: 0;
+        page-break-after: always;
+        break-after: page;
+      }
+      .print-page:last-child,
+      .print-page.final-page {
+        page-break-after: auto;
+        break-after: auto;
+      }
+    }
+    .company-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #0F172A;
+      padding-bottom: 4px;
+      margin-bottom: 4px;
+    }
+    .comp-name {
+      font-size: 19px;
+      font-weight: 900;
+      letter-spacing: -0.01em;
+      color: #0B4DB7;
+      line-height: 1.1;
+    }
+    .comp-sub {
+      font-size: 9px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .report-heading {
+      font-size: 12px;
+      font-weight: 800;
+      color: #0F172A;
+      margin-top: 2px;
+    }
+    .date-badge {
+      display: inline-block;
+      background-color: #EFF6FF;
+      color: #0B4DB7;
+      border: 1px solid #BFDBFE;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 9.5px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .meta-box {
+      text-align: right;
+      font-size: 9.5px;
+      color: #334155;
+      line-height: 1.35;
+    }
+    .meta-bold {
+      font-weight: 700;
+      color: #000000;
+    }
+    .kpi-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 5px;
+    }
+    .kpi-card {
+      border: 1px solid #CBD5E1;
+      border-radius: 4px;
+      padding: 3px 6px;
+      background-color: #F8FAFC;
+    }
+    .kpi-title {
+      font-size: 7.5px;
+      font-weight: 700;
+      color: #64748B;
+      text-transform: uppercase;
+      line-height: 1.2;
+    }
+    .kpi-val {
+      font-size: 11.5px;
+      font-weight: 900;
+      color: #0F172A;
+      margin-top: 1px;
+    }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10px;
+      border: 1.5px solid #0F172A;
+      table-layout: fixed;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tfoot {
+      display: table-row-group;
+    }
+    tr {
+      page-break-inside: avoid;
+    }
+    .data-table th {
+      background-color: #0F172A;
+      color: #FFFFFF;
+      font-weight: 800;
+      font-size: 9.5px;
+      padding: 4px 4px;
+      border: 1px solid #0F172A;
+      text-align: left;
+      letter-spacing: 0.02em;
+    }
+    .data-table td {
+      padding: 0 4px;
+      border: 1px solid #CBD5E1;
+      vertical-align: middle;
+    }
+    .data-row {
+      height: 28px;
+    }
+    .text-center {
+      text-align: center !important;
+    }
+    .text-right {
+      text-align: right !important;
+    }
+    .page-total-row td {
+      background-color: #F1F5F9 !important;
+      color: #0F172A !important;
+      border: 1px solid #CBD5E1 !important;
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 3px 4px;
+      height: 23px;
+    }
+    .grand-total-row td {
+      background-color: #0F172A !important;
+      color: #FFFFFF !important;
+      border: 1px solid #0F172A !important;
+      font-size: 10.5px;
+      font-weight: 900;
+      padding: 4px 4px;
+      height: 25px;
+    }
+    .signature-section {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+      padding: 0 15px;
+      page-break-inside: avoid;
+    }
+    .sig-box {
+      text-align: center;
+      width: 160px;
+    }
+    .sig-line {
+      border-top: 1px solid #000000;
+      margin-bottom: 3px;
+    }
+    .sig-label {
+      font-size: 9px;
+      font-weight: 700;
+      color: #334155;
+    }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div>
-      <div class="title">DHEEKSHA TRADE LINK</div>
-      <div style="font-size:10.5px; font-weight:700; color:#475569; text-transform:uppercase;">Wholesale & Retail Trading • Sivakasi</div>
-      <h2 style="font-size:15px; font-weight:800; margin-top:4px; color:#0F172A;">${reportTitle}</h2>
-      ${dateRangeText ? `<div class="date-badge">${dateRangeText}</div>` : ''}
-    </div>
-    <div style="text-align:right; font-size:11.5px; color:#334155;">
-      <div>Generated Date: <b>${currentDate}</b></div>
-      <div>Total Records: <b>${performas.length} Performas</b></div>
-    </div>
-  </div>
-
-  <!-- KPI Cards -->
-  <div class="kpi-row">
-    <div class="kpi-box">
-      <div class="kpi-lbl">Total Performas</div>
-      <div class="kpi-num">${performas.length}</div>
-    </div>
-    <div class="kpi-box">
-      <div class="kpi-lbl">Total Cases</div>
-      <div class="kpi-num" style="color:#0B4DB7;">${totalCases}</div>
-    </div>
-    <div class="kpi-box">
-      <div class="kpi-lbl">Total Allocated Value</div>
-      <div class="kpi-num" style="color:#0F172A;">₹ ${totalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-    </div>
-    <div class="kpi-box" style="background-color:#EFF6FF; border-color:#BFDBFE;">
-      <div class="kpi-lbl" style="color:#1E40AF;">Total Advance</div>
-      <div class="kpi-num" style="color:#1D4ED8;">₹ ${totalAdvance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-    </div>
-    <div class="kpi-box" style="background-color:#FEF2F2; border-color:#FECACA;">
-      <div class="kpi-lbl" style="color:#991B1B;">Total Balance to Pay</div>
-      <div class="kpi-num" style="color:#DC2626;">₹ ${totalBalanceToPay.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-    </div>
-  </div>
-
-  <table class="table">
-    <thead>
-      <tr>
-        <th class="text-center" style="width:30px;">#</th>
-        <th class="text-center" style="width:75px;">Performa #</th>
-        <th class="text-center" style="width:75px;">Date</th>
-        <th>Customer Name</th>
-        <th>Company</th>
-        <th class="text-center" style="width:45px;">Cases</th>
-        <th class="text-center" style="width:70px;">Status</th>
-        <th class="text-right" style="width:95px;">Total Value</th>
-        <th class="text-right" style="width:95px;">Advance Amount</th>
-        <th class="text-right" style="width:95px;">Balance to Pay</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rowsHtml || '<tr><td colspan="10" class="text-center" style="padding:18px; color:#64748B;">No performa records found for the selected period.</td></tr>'}
-    </tbody>
-    <tfoot>
-      <tr class="totals">
-        <td colspan="5" class="text-right" style="padding-right:10px;">GRAND TOTALS (${performas.length} Performas):</td>
-        <td class="text-center">${totalCases}</td>
-        <td></td>
-        <td class="text-right">₹ ${totalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right">₹ ${totalAdvance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td class="text-right">₹ ${totalBalanceToPay.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-      </tr>
-    </tfoot>
-  </table>
-
-  <!-- Signatures -->
-  <div class="sig-section">
-    <div style="text-align:center; width:150px;">
-      <div style="height:24px;"></div>
-      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Prepared By</div>
-    </div>
-    <div style="text-align:center; width:150px;">
-      <div style="height:24px;"></div>
-      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Checked & Verified</div>
-    </div>
-    <div style="text-align:center; width:150px;">
-      <div style="font-weight:700; margin-bottom:20px;">For Dheeksha Trade Link</div>
-      <div style="border-top:1px solid #0F172A; padding-top:4px; font-weight:700;">Authorized Signatory</div>
-    </div>
-  </div>
+  ${pagesHtml}
 </body>
 </html>
   `;
