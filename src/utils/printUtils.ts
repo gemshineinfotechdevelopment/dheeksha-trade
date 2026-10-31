@@ -475,10 +475,13 @@ export const generateCustomerListPrintHtml = (
   }).replace(/\//g, '-');
   const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-  let totalDebit = 0;
-  let totalCredit = 0;
-  let totalPendingDue = 0;
-  let totalAdvanceHeld = 0;
+  const PAGE_SIZE = 25;
+  const totalPages = Math.max(1, Math.ceil(customers.length / PAGE_SIZE));
+
+  let overallDebit = 0;
+  let overallCredit = 0;
+  let overallPendingDue = 0;
+  let overallAdvanceHeld = 0;
 
   customers.forEach((c) => {
     const deb = c.totalDebit || 0;
@@ -486,37 +489,204 @@ export const generateCustomerListPrintHtml = (
     const due = c.pendingDue || 0;
     const net = c.netBalance || 0;
 
-    totalDebit += deb;
-    totalCredit += cred;
-    totalPendingDue += due;
-    if (net > 0) totalAdvanceHeld += net;
+    overallDebit += deb;
+    overallCredit += cred;
+    overallPendingDue += due;
+    if (net > 0) overallAdvanceHeld += net;
   });
 
-  const rowsHtml = customers.map((c, idx) => {
-    const idDisplay = c.idCode || `#${(idx + 1).toString().padStart(4, '0')}`;
-    const deb = (c.totalDebit || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-    const cred = (c.totalCredit || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-    const isEven = idx % 2 === 1;
+  const pagesHtml = Array.from({ length: totalPages }).map((_, pageIdx) => {
+    const startIndex = pageIdx * PAGE_SIZE;
+    const pageCustomers = customers.slice(startIndex, startIndex + PAGE_SIZE);
+    const isFirstPage = pageIdx === 0;
+    const isFinalPage = pageIdx === totalPages - 1;
 
-    let balanceHtml = '';
-    if ((c.pendingDue || 0) > 0) {
-      balanceHtml = `<span style="color:#DC2626; font-weight:800;">₹ ${(c.pendingDue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Due)</span>`;
-    } else if ((c.netBalance || 0) > 0) {
-      balanceHtml = `<span style="color:#0284C7; font-weight:800;">+₹ ${(c.netBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Adv)</span>`;
-    } else {
-      balanceHtml = `<span style="color:#16A34A; font-weight:700;">₹ 0.00 (Settled)</span>`;
-    }
+    let pageDebit = 0;
+    let pageCredit = 0;
+    let pagePendingDue = 0;
+    let pageAdvanceHeld = 0;
+
+    pageCustomers.forEach((c) => {
+      const deb = c.totalDebit || 0;
+      const cred = c.totalCredit || 0;
+      const due = c.pendingDue || 0;
+      const net = c.netBalance || 0;
+
+      pageDebit += deb;
+      pageCredit += cred;
+      pagePendingDue += due;
+      if (net > 0) pageAdvanceHeld += net;
+    });
+
+    const pageRowsHtml = pageCustomers.map((c, localIdx) => {
+      const globalIdx = startIndex + localIdx;
+      const idDisplay = c.idCode || `#${(globalIdx + 1).toString().padStart(4, '0')}`;
+      const deb = (c.totalDebit || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+      const cred = (c.totalCredit || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+      const isEven = localIdx % 2 === 1;
+
+      let balanceHtml = '';
+      if ((c.pendingDue || 0) > 0) {
+        balanceHtml = `<span style="color:#DC2626; font-weight:800;">₹ ${(c.pendingDue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Due)</span>`;
+      } else if ((c.netBalance || 0) > 0) {
+        balanceHtml = `<span style="color:#0284C7; font-weight:800;">+₹ ${(c.netBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Adv)</span>`;
+      } else {
+        balanceHtml = `<span style="color:#16A34A; font-weight:700;">₹ 0.00 (Settled)</span>`;
+      }
+
+      return `
+        <tr class="data-row" style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
+          <td class="text-center" style="width: 30px;">${globalIdx + 1}</td>
+          <td class="text-center" style="width: 55px; font-weight:700; color:#475569;">${idDisplay}</td>
+          <td style="font-weight:800; color:#0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;">${c.name}</td>
+          <td style="color:#475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 195px;">${c.address || '-'}</td>
+          <td class="text-right" style="font-weight:700; color:#1E293B; width: 90px;">₹ ${deb}</td>
+          <td class="text-right" style="font-weight:700; color:#16A34A; width: 90px;">₹ ${cred}</td>
+          <td class="text-right" style="width: 105px;">${balanceHtml}</td>
+        </tr>
+      `;
+    }).join('');
 
     return `
-      <tr style="background-color: ${isEven ? '#F8FAFC' : '#FFFFFF'};">
-        <td class="text-center" style="width: 26px; border: 1px solid #CBD5E1; padding: 4px 3px;">${idx + 1}</td>
-        <td class="text-center" style="width: 48px; font-weight:700; color:#475569; border: 1px solid #CBD5E1; padding: 4px 3px;">${idDisplay}</td>
-        <td style="font-weight:800; color:#0F172A; border: 1px solid #CBD5E1; padding: 4px 6px;">${c.name}</td>
-        <td style="font-size:9.5px; color:#475569; max-width: 140px; border: 1px solid #CBD5E1; padding: 4px 4px; word-break: break-word;">${c.address || '-'}</td>
-        <td class="text-right" style="font-weight:700; color:#1E293B; width: 85px; border: 1px solid #CBD5E1; padding: 4px 5px; font-size: 10px;">₹ ${deb}</td>
-        <td class="text-right" style="font-weight:700; color:#16A34A; width: 85px; border: 1px solid #CBD5E1; padding: 4px 5px; font-size: 10px;">₹ ${cred}</td>
-        <td class="text-right" style="width: 100px; border: 1px solid #CBD5E1; padding: 4px 5px; font-size: 9.5px;">${balanceHtml}</td>
-      </tr>
+      <div class="print-page ${isFinalPage ? 'final-page' : ''}">
+        ${
+          isFirstPage
+            ? `
+        <!-- Full Header Banner (Page 1) -->
+        <div class="company-banner">
+          <div>
+            <div class="comp-name">DHEEKSHA TRADE LINK</div>
+            <div class="comp-sub">Wholesale & Retail Trading • Sivakasi</div>
+            <div class="report-heading">${reportTitle}</div>
+            ${dateRangeText ? `<div class="date-badge">${dateRangeText}</div>` : ''}
+          </div>
+          <div class="meta-box">
+            <div>Generated: <span class="meta-bold">${currentDate} ${currentTime}</span></div>
+            <div>Total Records: <span class="meta-bold">${customers.length} Customers</span></div>
+            <div>Page: <span class="meta-bold">1 of ${totalPages}</span></div>
+          </div>
+        </div>
+
+        <!-- Summary Metrics (Page 1) -->
+        <div class="kpi-summary-grid">
+          <div class="kpi-card">
+            <div class="kpi-title">Total Customers</div>
+            <div class="kpi-val">${customers.length}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-title">Total Debit (Purchases)</div>
+            <div class="kpi-val">₹ ${overallDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-title">Total Credit (Paid)</div>
+            <div class="kpi-val" style="color:#16A34A;">₹ ${overallCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          </div>
+          <div class="kpi-card" style="background-color:#FEF2F2; border-color:#FECACA;">
+            <div class="kpi-title" style="color:#991B1B;">Total Pending Due</div>
+            <div class="kpi-val" style="color:#DC2626;">₹ ${overallPendingDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          </div>
+          <div class="kpi-card" style="background-color:#F0F9FF; border-color:#BAE6FD;">
+            <div class="kpi-title" style="color:#0369A1;">Total Advance Balances</div>
+            <div class="kpi-val" style="color:#0284C7;">₹ ${overallAdvanceHeld.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          </div>
+        </div>`
+            : `
+        <!-- Compact Header (Subsequent Pages) -->
+        <div class="subsequent-header">
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0F172A; padding-bottom: 4px; margin-bottom: 6px;">
+            <div>
+              <span style="font-size: 15px; font-weight: 900; color: #0B4DB7;">DHEEKSHA TRADE LINK</span>
+              <span style="font-size: 10.5px; font-weight: 700; color: #475569; margin-left: 8px;">• ${reportTitle}</span>
+              ${dateRangeText ? `<span class="date-badge" style="margin-left: 8px; font-size: 9px; padding: 1px 6px;">${dateRangeText}</span>` : ''}
+            </div>
+            <div style="font-size: 10px; color: #334155; font-weight: 700;">
+              <span>Date: ${currentDate}</span> | <span>Records: ${startIndex + 1} - ${startIndex + pageCustomers.length}</span> | <span>Page ${pageIdx + 1} of ${totalPages}</span>
+            </div>
+          </div>
+        </div>`
+        }
+
+        <!-- Master Customer Table -->
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="text-center" style="width: 30px;">#</th>
+              <th class="text-center" style="width: 55px;">ID</th>
+              <th style="width: 180px;">Customer Name</th>
+              <th style="width: 195px;">Address</th>
+              <th class="text-right" style="width: 90px;">Debit (Dr)</th>
+              <th class="text-right" style="width: 90px;">Credit (Cr)</th>
+              <th class="text-right" style="width: 105px;">Net Balance / Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pageRowsHtml || '<tr><td colspan="7" class="text-center" style="padding: 20px;">No customer records found for the selected range.</td></tr>'}
+          </tbody>
+          <tfoot>
+            <!-- Page Total Row (Printed at bottom of EVERY page) -->
+            <tr class="page-total-row">
+              <td colspan="4" class="text-right" style="padding-right: 8px;">
+                PAGE ${pageIdx + 1} TOTAL (${pageCustomers.length} Records):
+              </td>
+              <td class="text-right">₹ ${pageDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right">₹ ${pageCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right">
+                ${
+                  pagePendingDue > 0
+                    ? `Due: ₹ ${pagePendingDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                    : pageAdvanceHeld > 0
+                    ? `+₹ ${pageAdvanceHeld.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Adv)`
+                    : `Settled`
+                }
+              </td>
+            </tr>
+
+            <!-- Final Page Only: OVERALL GRAND TOTALS -->
+            ${
+              isFinalPage
+                ? `
+            <tr class="grand-total-row">
+              <td colspan="4" class="text-right" style="padding-right: 8px;">
+                OVERALL GRAND TOTALS (${customers.length} Customers):
+              </td>
+              <td class="text-right">₹ ${overallDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right">₹ ${overallCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td class="text-right">
+                ${
+                  overallPendingDue > 0
+                    ? `Due: ₹ ${overallPendingDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                    : overallAdvanceHeld > 0
+                    ? `+₹ ${overallAdvanceHeld.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Adv)`
+                    : `Settled`
+                }
+              </td>
+            </tr>`
+                : ''
+            }
+          </tfoot>
+        </table>
+
+        ${
+          isFinalPage
+            ? `
+        <!-- Signature Section (Final Page Only) -->
+        <div class="signature-section">
+          <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Prepared By</div>
+          </div>
+          <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Checked & Verified By</div>
+          </div>
+          <div class="sig-box">
+            <div class="sig-line"></div>
+            <div class="sig-label">Authorized Signatory</div>
+          </div>
+        </div>`
+            : ''
+        }
+      </div>
     `;
   }).join('');
 
@@ -529,7 +699,7 @@ export const generateCustomerListPrintHtml = (
   <style>
     @page {
       size: A4 portrait;
-      margin: 8mm 8mm;
+      margin: 6mm 8mm;
     }
     *, *:before, *:after {
       box-sizing: border-box;
@@ -543,51 +713,86 @@ export const generateCustomerListPrintHtml = (
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
-    .report-container {
+    .print-page {
       width: 100%;
-      padding: 6px;
+      box-sizing: border-box;
+      page-break-after: always;
+      break-after: page;
+      padding: 0;
+    }
+    .print-page:last-child,
+    .print-page.final-page {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    @media screen {
+      .print-page {
+        margin-bottom: 25px;
+        padding-bottom: 25px;
+        border-bottom: 2px dashed #94A3B8;
+      }
+      .print-page:last-child {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
+      }
+    }
+    @media print {
+      .print-page {
+        margin: 0;
+        border: none;
+        padding: 0;
+        page-break-after: always;
+        break-after: page;
+      }
+      .print-page:last-child,
+      .print-page.final-page {
+        page-break-after: auto;
+        break-after: auto;
+      }
     }
     .company-banner {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
       border-bottom: 2px solid #0F172A;
-      padding-bottom: 8px;
-      margin-bottom: 10px;
+      padding-bottom: 4px;
+      margin-bottom: 5px;
     }
     .comp-name {
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 900;
       letter-spacing: -0.01em;
       color: #0B4DB7;
+      line-height: 1.1;
     }
     .comp-sub {
-      font-size: 10.5px;
+      font-size: 9px;
       font-weight: 700;
       color: #475569;
       text-transform: uppercase;
       letter-spacing: 0.08em;
     }
     .report-heading {
-      font-size: 14.5px;
+      font-size: 12px;
       font-weight: 800;
       color: #0F172A;
-      margin-top: 3px;
+      margin-top: 2px;
     }
     .date-badge {
       display: inline-block;
       background-color: #EFF6FF;
       color: #0B4DB7;
       border: 1px solid #BFDBFE;
-      padding: 2px 8px;
+      padding: 1px 6px;
       border-radius: 4px;
-      font-size: 11px;
+      font-size: 9.5px;
       font-weight: 700;
-      margin-top: 4px;
+      margin-top: 2px;
     }
     .meta-box {
       text-align: right;
-      font-size: 11px;
+      font-size: 9.5px;
       color: #334155;
       line-height: 1.35;
     }
@@ -599,38 +804,39 @@ export const generateCustomerListPrintHtml = (
       display: grid;
       grid-template-columns: repeat(5, 1fr);
       gap: 5px;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
     }
     .kpi-card {
       border: 1px solid #CBD5E1;
-      border-radius: 5px;
-      padding: 5px 6px;
+      border-radius: 4px;
+      padding: 3px 6px;
       background-color: #F8FAFC;
     }
     .kpi-title {
-      font-size: 8.5px;
+      font-size: 7.5px;
       font-weight: 700;
       color: #64748B;
       text-transform: uppercase;
       line-height: 1.2;
     }
     .kpi-val {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 900;
       color: #0F172A;
-      margin-top: 2px;
+      margin-top: 1px;
     }
     .data-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 10px;
-      border: 1px solid #0F172A;
+      font-size: 10.5px;
+      border: 1.5px solid #0F172A;
+      table-layout: fixed;
     }
     thead {
       display: table-header-group;
     }
     tfoot {
-      display: table-footer-group;
+      display: table-row-group;
     }
     tr {
       page-break-inside: avoid;
@@ -646,9 +852,12 @@ export const generateCustomerListPrintHtml = (
       letter-spacing: 0.02em;
     }
     .data-table td {
-      padding: 4px 4px;
+      padding: 0 4px;
       border: 1px solid #CBD5E1;
       vertical-align: middle;
+    }
+    .data-row {
+      height: 33px;
     }
     .text-center {
       text-align: center !important;
@@ -656,17 +865,28 @@ export const generateCustomerListPrintHtml = (
     .text-right {
       text-align: right !important;
     }
-    .totals-row td {
+    .page-total-row td {
+      background-color: #F1F5F9 !important;
+      color: #0F172A !important;
+      border: 1px solid #CBD5E1 !important;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 4px 4px;
+      height: 25px;
+    }
+    .grand-total-row td {
       background-color: #0F172A !important;
       color: #FFFFFF !important;
       border: 1px solid #0F172A !important;
-      font-size: 11.5px;
+      font-size: 10.5px;
       font-weight: 900;
+      padding: 4px 4px;
+      height: 26px;
     }
     .signature-section {
       display: flex;
       justify-content: space-between;
-      margin-top: 22px;
+      margin-top: 12px;
       padding: 0 15px;
       page-break-inside: avoid;
     }
@@ -676,103 +896,17 @@ export const generateCustomerListPrintHtml = (
     }
     .sig-line {
       border-top: 1px solid #000000;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
     }
     .sig-label {
-      font-size: 10.5px;
+      font-size: 9px;
       font-weight: 700;
       color: #334155;
     }
   </style>
 </head>
 <body>
-  <div class="report-container">
-    <!-- Header Banner -->
-    <div class="company-banner">
-      <div>
-        <div class="comp-name">DHEEKSHA TRADE LINK</div>
-        <div class="comp-sub">Wholesale & Retail Trading • Sivakasi</div>
-        <div class="report-heading">${reportTitle}</div>
-        ${dateRangeText ? `<div class="date-badge">${dateRangeText}</div>` : ''}
-      </div>
-      <div class="meta-box">
-        <div>Generated: <span class="meta-bold">${currentDate} ${currentTime}</span></div>
-        <div>Total Records: <span class="meta-bold">${customers.length} Customers</span></div>
-      </div>
-    </div>
-
-    <!-- Summary Metrics -->
-    <div class="kpi-summary-grid">
-      <div class="kpi-card">
-        <div class="kpi-title">Total Customers</div>
-        <div class="kpi-val">${customers.length}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-title">Total Debit (Purchases)</div>
-        <div class="kpi-val">₹ ${totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-title">Total Credit (Paid)</div>
-        <div class="kpi-val" style="color:#16A34A;">₹ ${totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-      </div>
-      <div class="kpi-card" style="background-color:#FEF2F2; border-color:#FECACA;">
-        <div class="kpi-title" style="color:#991B1B;">Total Pending Due</div>
-        <div class="kpi-val" style="color:#DC2626;">₹ ${totalPendingDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-      </div>
-      <div class="kpi-card" style="background-color:#F0F9FF; border-color:#BAE6FD;">
-        <div class="kpi-title" style="color:#0369A1;">Total Advance Balances</div>
-        <div class="kpi-val" style="color:#0284C7;">₹ ${totalAdvanceHeld.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-      </div>
-    </div>
-
-    <!-- Master Customer Table -->
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th class="text-center" style="width: 26px;">#</th>
-          <th class="text-center" style="width: 48px;">ID</th>
-          <th>Customer Name</th>
-          <th style="width: 140px;">Address</th>
-          <th class="text-right" style="width: 85px;">Debit (Dr)</th>
-          <th class="text-right" style="width: 85px;">Credit (Cr)</th>
-          <th class="text-right" style="width: 100px;">Net Balance / Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rowsHtml || '<tr><td colspan="7" class="text-center" style="padding: 20px;">No customer records found for the selected range.</td></tr>'}
-      </tbody>
-      <tfoot>
-        <tr class="totals-row">
-          <td colspan="4" class="text-right" style="padding-right: 10px;">GRAND TOTALS (${customers.length} Customers):</td>
-          <td class="text-right">₹ ${totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-          <td class="text-right">₹ ${totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-          <td class="text-right">
-            ${
-              totalPendingDue > 0
-                ? `Due: ₹ ${totalPendingDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                : `Settled`
-            }
-          </td>
-        </tr>
-      </tfoot>
-    </table>
-
-    <!-- Signature Section -->
-    <div class="signature-section">
-      <div class="sig-box">
-        <div class="sig-line"></div>
-        <div class="sig-label">Prepared By</div>
-      </div>
-      <div class="sig-box">
-        <div class="sig-line"></div>
-        <div class="sig-label">Checked & Verified By</div>
-      </div>
-      <div class="sig-box">
-        <div class="sig-line"></div>
-        <div class="sig-label">Authorized Signatory</div>
-      </div>
-    </div>
-  </div>
+  ${pagesHtml}
 </body>
 </html>
   `;
