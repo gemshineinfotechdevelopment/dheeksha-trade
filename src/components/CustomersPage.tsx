@@ -215,14 +215,16 @@ export const CustomersPage: FC<CustomersPageProps> = ({ onAddNew, onSelectCustom
   };
 
   const filteredCustomers = useMemo(() => {
-    return customers.filter(
-      (c) =>
-        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.gst.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.mobile.includes(searchTerm) ||
-        (c.idCode && c.idCode.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    return customers
+      .filter(
+        (c) =>
+          c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.gst.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.mobile.includes(searchTerm) ||
+          (c.idCode && c.idCode.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
   }, [customers, searchTerm]);
 
   return (

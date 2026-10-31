@@ -4,6 +4,7 @@ import { Performa, type IPerformaProductItem } from '../models/Performa';
 import { PerformaAudit } from '../models/PerformaAudit';
 import { Customer } from '../models/Customer';
 import { escapeRegex } from '../utils/ledgerUtils';
+import { getNextCustomerIdCode } from './customerController';
 
 export const getPerformas = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -211,7 +212,9 @@ export const createPerforma = async (req: Request, res: Response, next: NextFunc
       if (existingCust) {
         validCustomerId = existingCust._id;
       } else {
+        const idCode = await getNextCustomerIdCode();
         const newCust = await Customer.create({
+          idCode,
           name: customerSnapshot.name.trim(),
           mobile: customerSnapshot.phone || '-',
           address: customerSnapshot.address || '-',

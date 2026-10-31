@@ -6,6 +6,83 @@ import { PerformaAudit } from '../models/PerformaAudit';
 import { Particular } from '../models/Particular';
 import { escapeRegex, getParticularNetTotal } from '../utils/ledgerUtils';
 
+/**
+ * Helper to get the next available Customer idCode (#0001, #0002, ...).
+ * - Scans all existing customer idCodes.
+ * - Extracts all existing numbers and raw codes.
+ * - If requestedIdCode is provided:
+ *     Checks if duplicate in DB. If duplicate, moves to the next number.
+ * - If no requestedIdCode (or duplicate resolved):
+ *     Finds the lowest available positive number (1, 2, 3...) filling any gaps
+ *     caused by deletions (e.g. #0001, #0057, #0058).
+ * - Performs a final DB existence check to ensure uniqueness.
+ */
+export const getNextCustomerIdCode = async (
+  requestedIdCode?: string,
+  excludeCustomerId?: string
+): Promise<string> => {
+  const query: any = {
+    idCode: { $exists: true, $ne: null },
+  };
+  if (excludeCustomerId) {
+    query._id = { $ne: excludeCustomerId };
+  }
+
+  const existingCustomers = await Customer.find(query, 'idCode').lean();
+  const usedNumbers = new Set<number>();
+  const usedCodes = new Set<string>();
+
+  for (const c of existingCustomers) {
+    if (c.idCode) {
+      const clean = String(c.idCode).trim().toUpperCase();
+      usedCodes.add(clean);
+      const match = clean.match(/\d+/);
+      if (match) {
+        usedNumbers.add(parseInt(match[0], 10));
+      }
+    }
+  }
+
+  let targetNum = 1;
+
+  if (requestedIdCode && String(requestedIdCode).trim()) {
+    const raw = String(requestedIdCode).trim().toUpperCase();
+    const match = raw.match(/\d+/);
+    if (match) {
+      const reqNum = parseInt(match[0], 10);
+      const formattedReq = `#${reqNum.toString().padStart(4, '0')}`;
+      if (!usedCodes.has(raw) && !usedCodes.has(formattedReq) && !usedNumbers.has(reqNum)) {
+        return formattedReq;
+      }
+      // Duplicate found! Move to the next number
+      targetNum = reqNum + 1;
+    } else {
+      if (!usedCodes.has(raw)) {
+        return raw;
+      }
+      targetNum = 1;
+    }
+  }
+
+  while (usedNumbers.has(targetNum)) {
+    targetNum++;
+  }
+
+  let finalCode = `#${targetNum.toString().padStart(4, '0')}`;
+
+  while (
+    await Customer.exists({
+      idCode: finalCode,
+      ...(excludeCustomerId ? { _id: { $ne: excludeCustomerId } } : {}),
+    })
+  ) {
+    targetNum++;
+    finalCode = `#${targetNum.toString().padStart(4, '0')}`;
+  }
+
+  return finalCode;
+};
+
 export const getCustomers = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     // Backfill missing idCode for existing records if any
@@ -14,29 +91,13 @@ export const getCustomers = async (_req: Request, res: Response, next: NextFunct
     });
 
     if (missingIdCustomers.length > 0) {
-      const allCustomers = await Customer.find().sort({ createdAt: 1 });
-      let currentMax = 0;
-      allCustomers.forEach((c) => {
-        if (c.idCode) {
-          const match = c.idCode.match(/\d+/);
-          if (match) {
-            const num = parseInt(match[0], 10);
-            if (num > currentMax) currentMax = num;
-          }
-        }
-      });
-
-      for (let i = 0; i < allCustomers.length; i++) {
-        const c = allCustomers[i];
-        if (!c.idCode) {
-          currentMax += 1;
-          c.idCode = `#${currentMax.toString().padStart(4, '0')}`;
-          await c.save();
-        }
+      for (const c of missingIdCustomers) {
+        c.idCode = await getNextCustomerIdCode();
+        await c.save();
       }
     }
 
-    const customers = await Customer.find().sort({ createdAt: 1 }).lean();
+    const customers = await Customer.find().lean();
     const allLedgerEntries = await AccountLedger.find({}).lean();
     const allAudits = await PerformaAudit.find({}).lean();
     const allPerformas = await Performa.find({}).lean();
@@ -152,6 +213,11 @@ export const getCustomers = async (_req: Request, res: Response, next: NextFunct
       };
     });
 
+    // Sort customer records in ascending alphabetical order by name
+    enrichedCustomers.sort((a: any, b: any) =>
+      (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+    );
+
     res.status(200).json({ success: true, count: enrichedCustomers.length, data: enrichedCustomers });
   } catch (error) {
     next(error);
@@ -175,21 +241,7 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
   try {
     const { name, mobile, address, gst, idCode } = req.body;
 
-    let finalIdCode = idCode ? String(idCode).trim() : '';
-    if (!finalIdCode) {
-      const allCustomers = await Customer.find().sort({ createdAt: 1 });
-      let currentMax = 0;
-      allCustomers.forEach((c) => {
-        if (c.idCode) {
-          const match = c.idCode.match(/\d+/);
-          if (match) {
-            const num = parseInt(match[0], 10);
-            if (num > currentMax) currentMax = num;
-          }
-        }
-      });
-      finalIdCode = `#${(currentMax + 1).toString().padStart(4, '0')}`;
-    }
+    const finalIdCode = await getNextCustomerIdCode(idCode);
 
     const customer = await Customer.create({
       name,
@@ -212,6 +264,11 @@ export const updateCustomer = async (req: Request, res: Response, next: NextFunc
       return;
     }
     const oldName = oldCustomer.name;
+
+    if (req.body.idCode) {
+      req.body.idCode = await getNextCustomerIdCode(req.body.idCode, String(req.params.id));
+    }
+
     const customer = await Customer.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,

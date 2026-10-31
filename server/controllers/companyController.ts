@@ -2,6 +2,83 @@ import type { Request, Response, NextFunction } from 'express';
 import { Company } from '../models/Company';
 import { escapeRegex } from '../utils/ledgerUtils';
 
+/**
+ * Helper to get the next available Company slNo (01, 02, ...).
+ * - Scans all existing company slNo values.
+ * - Extracts all existing numbers and raw codes.
+ * - If requestedSlNo is provided:
+ *     Checks if duplicate in DB. If duplicate, moves to the next number.
+ * - If no requestedSlNo (or duplicate resolved):
+ *     Finds the lowest available positive number (1, 2, 3...) filling any gaps
+ *     caused by deletions (e.g. 01, 02...).
+ * - Performs a final DB existence check to ensure uniqueness.
+ */
+export const getNextCompanySlNo = async (
+  requestedSlNo?: string,
+  excludeCompanyId?: string
+): Promise<string> => {
+  const query: any = {
+    slNo: { $exists: true, $ne: null },
+  };
+  if (excludeCompanyId) {
+    query._id = { $ne: excludeCompanyId };
+  }
+
+  const existingCompanies = await Company.find(query, 'slNo').lean();
+  const usedNumbers = new Set<number>();
+  const usedCodes = new Set<string>();
+
+  for (const c of existingCompanies) {
+    if (c.slNo) {
+      const clean = String(c.slNo).trim().toUpperCase();
+      usedCodes.add(clean);
+      const match = clean.match(/\d+/);
+      if (match) {
+        usedNumbers.add(parseInt(match[0], 10));
+      }
+    }
+  }
+
+  let targetNum = 1;
+
+  if (requestedSlNo && String(requestedSlNo).trim()) {
+    const raw = String(requestedSlNo).trim().toUpperCase();
+    const match = raw.match(/\d+/);
+    if (match) {
+      const reqNum = parseInt(match[0], 10);
+      const formattedReq = reqNum.toString().padStart(2, '0');
+      if (!usedCodes.has(raw) && !usedCodes.has(formattedReq) && !usedNumbers.has(reqNum)) {
+        return formattedReq;
+      }
+      // Duplicate found! Move to the next number
+      targetNum = reqNum + 1;
+    } else {
+      if (!usedCodes.has(raw)) {
+        return raw;
+      }
+      targetNum = 1;
+    }
+  }
+
+  while (usedNumbers.has(targetNum)) {
+    targetNum++;
+  }
+
+  let finalSlNo = targetNum.toString().padStart(2, '0');
+
+  while (
+    await Company.exists({
+      slNo: finalSlNo,
+      ...(excludeCompanyId ? { _id: { $ne: excludeCompanyId } } : {}),
+    })
+  ) {
+    targetNum++;
+    finalSlNo = targetNum.toString().padStart(2, '0');
+  }
+
+  return finalSlNo;
+};
+
 export const getCompanies = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     // Backfill missing slNo for existing records if any
@@ -10,29 +87,17 @@ export const getCompanies = async (_req: Request, res: Response, next: NextFunct
     });
 
     if (missingSlNoCompanies.length > 0) {
-      const allCompanies = await Company.find().sort({ createdAt: 1 });
-      let currentMax = 0;
-      allCompanies.forEach((c) => {
-        if (c.slNo) {
-          const match = c.slNo.match(/\d+/);
-          if (match) {
-            const num = parseInt(match[0], 10);
-            if (num > currentMax) currentMax = num;
-          }
-        }
-      });
-
-      for (let i = 0; i < allCompanies.length; i++) {
-        const c = allCompanies[i];
-        if (!c.slNo) {
-          currentMax += 1;
-          c.slNo = currentMax.toString().padStart(2, '0');
-          await c.save();
-        }
+      for (const c of missingSlNoCompanies) {
+        c.slNo = await getNextCompanySlNo();
+        await c.save();
       }
     }
 
-    const companies = await Company.find().sort({ createdAt: 1 });
+    const companies = await Company.find().lean();
+    // Sort companies in ascending alphabetical order by name
+    companies.sort((a: any, b: any) =>
+      (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+    );
     res.status(200).json({ success: true, count: companies.length, data: companies });
   } catch (error) {
     next(error);
@@ -54,29 +119,11 @@ export const getCompanyById = async (req: Request, res: Response, next: NextFunc
 
 export const createCompany = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    let { slNo } = req.body;
-    if (!slNo) {
-      const allCompanies = await Company.find({}, 'slNo createdAt').sort({ createdAt: 1 });
-      let maxNum = 0;
-      for (const comp of allCompanies) {
-        if (comp.slNo) {
-          const match = comp.slNo.match(/\d+/);
-          if (match) {
-            const num = parseInt(match[0], 10);
-            if (num > maxNum) maxNum = num;
-          }
-        }
-      }
-      if (maxNum === 0) {
-        maxNum = allCompanies.length;
-      }
-      const nextNum = maxNum + 1;
-      slNo = nextNum.toString().padStart(2, '0');
-    }
+    const finalSlNo = await getNextCompanySlNo(req.body.slNo);
 
     const company = await Company.create({
       ...req.body,
-      slNo,
+      slNo: finalSlNo,
     });
     res.status(201).json({ success: true, data: company });
   } catch (error) {
@@ -92,6 +139,11 @@ export const updateCompany = async (req: Request, res: Response, next: NextFunct
       return;
     }
     const oldName = oldCompany.name;
+
+    if (req.body.slNo) {
+      req.body.slNo = await getNextCompanySlNo(req.body.slNo, String(req.params.id));
+    }
+
     const company = await Company.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,

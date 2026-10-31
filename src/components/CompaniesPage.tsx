@@ -1,4 +1,4 @@
-import { useState, useEffect, type FC } from 'react';
+import { useState, useEffect, useMemo, type FC } from 'react';
 import {
   Box,
   Typography,
@@ -124,12 +124,16 @@ export const CompaniesPage: FC<CompaniesPageProps> = ({ onAddCompany }) => {
     }
   };
 
-  const filteredCompanies = companies.filter(
-    (c) =>
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.gstin.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredCompanies = useMemo(() => {
+    return companies
+      .filter(
+        (c) =>
+          c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.gstin.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  }, [companies, searchTerm]);
 
   return (
     <Box

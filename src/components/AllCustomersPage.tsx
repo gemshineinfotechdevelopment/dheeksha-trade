@@ -292,27 +292,29 @@ export const AllCustomersPage: FC<AllCustomersPageProps> = ({
 
   // Filtering Customers
   const filteredCustomers = useMemo(() => {
-    return customers.filter((c) => {
-      const matchesSearch =
-        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (c.address && c.address.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (c.gst && c.gst.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (c.mobile && c.mobile.includes(searchTerm)) ||
-        (c.idCode && c.idCode.toLowerCase().includes(searchTerm.toLowerCase()));
+    return customers
+      .filter((c) => {
+        const matchesSearch =
+          c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (c.address && c.address.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (c.gst && c.gst.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (c.mobile && c.mobile.includes(searchTerm)) ||
+          (c.idCode && c.idCode.toLowerCase().includes(searchTerm.toLowerCase()));
 
-      if (!matchesSearch) return false;
+        if (!matchesSearch) return false;
 
-      if (statusFilter === 'PENDING') {
-        return (c.pendingDue || 0) > 0;
-      }
-      if (statusFilter === 'SETTLED') {
-        return (c.pendingDue || 0) === 0 && (c.netBalance || 0) <= 0;
-      }
-      if (statusFilter === 'ADVANCE') {
-        return (c.netBalance || 0) > 0;
-      }
-      return true;
-    });
+        if (statusFilter === 'PENDING') {
+          return (c.pendingDue || 0) > 0;
+        }
+        if (statusFilter === 'SETTLED') {
+          return (c.pendingDue || 0) === 0 && (c.netBalance || 0) <= 0;
+        }
+        if (statusFilter === 'ADVANCE') {
+          return (c.netBalance || 0) > 0;
+        }
+        return true;
+      })
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
   }, [customers, searchTerm, statusFilter]);
 
   // Live preview for Payment Modal
